@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Maintenance in Progress</title>
+    <style>
+        body {
+            font-family: 'Courier New', Courier, monospace;
+            background-color: #1e1e1e;
+            color: #c4c4c4;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100dvh;
+            overflow-x: hidden;
+            overflow-y: scroll;
+            scroll-behavior: smooth;
+        }
+        .container {
+            text-align: center;
+            background: #2a2a2a;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(255, 255, 255, 0.1);
+            max-width: 800px;
+            margin: 20px;
+        }
+        h1 {
+            color: #80cbc4;
+            margin-bottom: 20px;
+            font-size: clamp(2em, 5vw, 3.5em);
+            text-shadow: 0 0 10px #80cbc4;
+        }
+        p {
+            font-size: clamp(0.9em, 2vw, 1em);
+            margin: 10px 0;
+            color: #b0bec5;
+        }
+        h2 {
+            color: #80cbc4;
+            margin-top: 30px;
+            font-size: 1.5em;
+        }
+        ul {
+            list-style: none;
+            padding: 0;
+            margin: 20px 0;
+        }
+        ul li {
+            background: #333;
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 5px;
+            color: #b0bec5;
+            font-size: clamp(0.9em, 2vw, 1em);
+        }
+        .highlight {
+            font-weight: bold;
+            color: #80cbc4;
+        }
+        .break {
+            margin-top: 20px;
+            font-size: 0.9em;
+            color: #b0bec5;
+        }
+        .check-back {
+            margin-top: 10px;
+            font-size: 1.1em;
+            color: #80cbc4;
+        }
+        .glitch {
+            position: relative;
+            display: inline-block;
+        }
+        .glitch::before,
+        .glitch::after {
+            content: attr(data-text);
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            overflow: hidden;
+        }
+        .glitch::before {
+            animation: glitchTop 2s infinite;
+            color: #ffab91;
+            clip: rect(0, 900px, 0, 0);
+        }
+        .glitch::after {
+            animation: glitchBottom 2s infinite;
+            color: #e1bee7;
+            clip: rect(0, 0, 0, 900px);
+        }
+        @keyframes glitchTop {
+            0% {
+                clip: rect(24px, 9999px, 28px, 0);
+                transform: skew(0.3deg);
+            }
+            20% {
+                clip: rect(36px, 9999px, 66px, 0);
+                transform: skew(0.3deg);
+            }
+            40% {
+                clip: rect(40px, 9999px, 100px, 0);
+                transform: skew(0.3deg);
+            }
+            60% {
+                clip: rect(50px, 9999px, 70px, 0);
+                transform: skew(0.3deg);
+            }
+            80% {
+                clip: rect(24px, 9999px, 28px, 0);
+                transform: skew(0.3deg);
+            }
+            100% {
+                clip: rect(10px, 9999px, 90px, 0);
+                transform: skew(0.3deg);
+            }
+        }
+        @keyframes glitchBottom {
+            0% {
+                clip: rect(56px, 9999px, 20px, 0);
+                transform: skew(0.5deg);
+            }
+            20% {
+                clip: rect(20px, 9999px, 80px, 0);
+                transform: skew(0.5deg);
+            }
+            40% {
+                clip: rect(30px, 9999px, 60px, 0);
+                transform: skew(0.5deg);
+            }
+            60% {
+                clip: rect(40px, 9999px, 40px, 0);
+                transform: skew(0.5deg);
+            }
+            80% {
+                clip: rect(56px, 9999px, 20px, 0);
+                transform: skew(0.5deg);
+            }
+            100% {
+                clip: rect(50px, 9999px, 30px, 0);
+                transform: skew(0.5deg);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="glitch" data-text="🚧 Maintenance in Progress 🚧">🚧 Maintenance in Progress 🚧</h1>
+        <p>We're currently performing some maintenance to improve your experience.</p>
+        <p>We apologize for any inconvenience and appreciate your patience. We'll be back shortly with even better service!</p>
+        <h2>Why?</h2>
+        <ul>
+            <li>Enhancing performance and reliability.</li>
+            <li>Fixing those pesky bugs 🐛.</li>
+            <li>Ensuring smooth operations.</li>
+        </ul>
+        <h2>What Should You Do?</h2>
+        <ul>
+            <li>Take a short break ☕.</li>
+            <li>Review your awesome code 💻.</li>
+            <li class="check-back">Check back soon!</li>
+        </ul>
+        <p class="break">Thank you for your understanding and continued support!</p>
+        <p class="highlight">Best regards,</p>
+        <p class="highlight">The Team</p>
+    </div>
+</body>
+</html>
