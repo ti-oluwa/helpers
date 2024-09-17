@@ -1,6 +1,11 @@
 import typing
 import datetime
 
+try:
+    import zoneinfo
+except ImportError:
+    from backports import zoneinfo
+
 
 # NOTE: This is not a perfect implementation, as not all edge cases have been consider.
 def split(
@@ -144,3 +149,94 @@ def split(
 
         # The next lower boundary is the current upper boundary
         lower_boundary = upper_boundary
+
+
+def timedelta_code_to_timedelta(timedelta_code: str):
+    """
+    Parses the timedelta code into a timedelta object.
+
+    A timedelta code is a string that represents a time period.
+    The code is a number followed by a letter representing the unit of time.
+    The following are the valid units of time:
+    - D: Days
+    - W: Weeks
+    - M: Months
+    - Y: Years
+
+    The following are the valid timedelta codes:
+    - 5D: 5 Days
+    - 1W: 1 Week,
+    - YTD: Year to Date (365 Days), etc.
+
+    :param timedelta_code: The timedelta code to parse.
+    :return: The timedelta object.
+    :raises ValueError: If the timedelta code is invalid.
+
+    Example:
+
+        ```python
+        timedelta_code_to_timedelta("5D")
+
+        # Output:
+        # datetime.timedelta(days=5)
+        ```
+    """
+    if timedelta_code == "YTD":
+        return datetime.timedelta(days=365)
+
+    number, unit = timedelta_code[:-1], timedelta_code[-1]
+    if not number.isdigit():
+        raise ValueError("Invalid timedelta code")
+
+    number = float(number)
+    if unit.upper() == "D":
+        return datetime.timedelta(days=number)
+    elif unit.upper() == "W":
+        return datetime.timedelta(weeks=number)
+    elif unit.upper() == "M":
+        return datetime.timedelta(days=number * 30)
+    elif unit.upper() == "Y":
+        return datetime.timedelta(days=number * 365)
+    else:
+        raise ValueError("Invalid timedelta code")
+
+
+def timedelta_code_to_datetime_range(
+    timdelta_code: str, *, timezone: str = None, future: bool = False
+) -> typing.Tuple[typing.Optional[datetime.datetime], datetime.datetime]:
+    """
+    Parses the timedelta code into a datetime range.
+
+    By default, the datetime range is calculated for the past.
+    To calculate the datetime range for the future, set future to True.
+
+    :param timdelta_code: The timedelta code to parse.
+    :param timezone: The timezone to use for the datetime objects.
+    :param future: Whether to calculate the datetime range for the future.
+    :return: A tuple containing the start and end datetime objects.
+
+    Example:
+
+        ```python
+        timedelta_code_to_datetime_range("5D") # 5 Days in the past
+
+        # Output:
+        # (datetime.datetime(2021, 9, 2, 10, 0, 0, 0, tzinfo=zoneinfo.ZoneInfo(key='UTC')), datetime.datetime(2021, 9, 7, 10, 0, 0, 0, tzinfo=zoneinfo.ZoneInfo(key='UTC')))
+
+        timedelta_code_to_datetime_range("5D", timezone="Africa/Nairobi", future=True) # 5 Days in the future
+
+        # Output:
+        # (datetime.datetime(2021, 9, 7, 13, 0, 0, 0, tzinfo=zoneinfo.ZoneInfo(key='Africa/Nairobi')), datetime.datetime(2021, 9, 12, 13, 0, 0, 0, tzinfo=zoneinfo.ZoneInfo(key='Africa/Nairobi')))
+        ```
+    """
+    delta = timedelta_code_to_timedelta(timdelta_code)
+    tz = zoneinfo.ZoneInfo(timezone) if timezone else None
+    now = datetime.datetime.now().astimezone(tz)
+
+    if future:
+        start = now
+        end = now + delta
+    else:
+        start = now - delta
+        end = now
+    return start, end
