@@ -1,10 +1,13 @@
-from typing import Union, TypeVar, List, Mapping, Any, Generic, Optional, Dict
+from typing import Literal, Union, TypeVar, List, Mapping, Any, Generic, Optional, Dict
 from django.db import models
 from django.db.models.manager import BaseManager
 from django.http import request
 from django.core.exceptions import ValidationError
 
 M = TypeVar("M", bound=models.Model)
+
+
+LogicalOperator = Literal["AND", "OR", "XOR"]
 
 
 class QueryDictQuerySetFilterer(Generic[M]):
@@ -48,6 +51,12 @@ class QueryDictQuerySetFilterer(Generic[M]):
 
     A check is done on instantiation if this is set. 
     Leave this unset if you want to skip the check
+    """
+    join_filters_on: LogicalOperator = models.Q.AND
+    """
+    What logical operator to use when joining filters
+
+    Defaults to `AND`
     """
 
     class ParseError(ValidationError):
@@ -121,7 +130,7 @@ class QueryDictQuerySetFilterer(Generic[M]):
                     raise TypeError(
                         f"parse_{key} method must return a `django.db.models.Q` object."
                     )
-                aggregate.add(query_filter, models.Q.AND)
+                aggregate.add(query_filter, type(self).join_filters_on)
         return aggregate
 
     def apply_filters(

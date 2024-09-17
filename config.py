@@ -5,7 +5,7 @@ from django.conf import settings as django_settings
 from .utils.misc import merge_dicts
 
 
-def _make_proxy_getter(module, settings: Any):
+def _make_proxy_getter(settings: Any):
     def proxy_getter(name: str) -> Any:
         try:
             value = getattr(settings, name)
@@ -13,8 +13,6 @@ def _make_proxy_getter(module, settings: Any):
             value = getattr(settings, name.upper())
         return value
 
-    if hasattr(module, "__getattr__"):
-        return functools.wraps(module.__getattr__)(proxy_getter)
     return proxy_getter
 
 
@@ -22,7 +20,12 @@ def make_proxy(module, settings):
     """
     Makes settings accessible through the module
     """
-    module.__getattr__ = _make_proxy_getter(module, settings)
+    proxy_getter = _make_proxy_getter(settings)
+
+    if hasattr(module, "__getattr__"):
+        module.__getattr__ = functools.wraps(module.__getattr__)(proxy_getter)
+    else:
+        module.__getattr__ = proxy_getter
     return module
 
 

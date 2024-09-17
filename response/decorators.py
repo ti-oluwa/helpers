@@ -114,8 +114,8 @@ def _get_replacement_code(code_map: CodeMap, code: int) -> int:
                     break
     try:
         return int(replacement)
-    except ValueError:
-        raise ValueError(f"Invalid status code mapping: {replacement}")
+    except ValueError as exc:
+        raise ValueError(f"Invalid status code mapping: {replacement}") from exc
 
 
 def map_code(code_map: CodeMap, *, method: str = "dispatch"):

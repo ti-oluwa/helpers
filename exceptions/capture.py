@@ -8,7 +8,18 @@ Use the `capture.enable` decorator to enable for specifc views only, especially,
 
 from __future__ import annotations
 import json
-from typing import Any, Callable, Dict, NoReturn, Tuple, TypeVar, Optional, Union
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    NoReturn,
+    Tuple,
+    TypeVar,
+    Optional,
+    Union,
+    TypedDict,
+    Unpack,
+)
 from django.http import HttpResponse, Http404
 from django.core.exceptions import PermissionDenied, BadRequest, ValidationError
 import functools
@@ -110,13 +121,13 @@ class Capture(ViewContextDecorator):
         """
         Captures exception and gives a response.
 
-        :param target: The type of exception to capture. Defaults to `BaseException`
+        :param target: Type of exception(s) to capture. Defaults to `BaseException`
         :param content: The content or message to be returned in the response. If not provided,
             exception detail will be used. This can also be a callable that will take the exception captured,
             process the result and return appropriate content to be returned in the response
         :param code: The status code of the response. Defaults to 500
-        :param response_type: The type of response to return. Defaults to `HttpResponse`
-        :param response_kwargs: The keyword arguments to pass on to the response constructor
+        :param response_type: Type of response to return. Defaults to `HttpResponse`
+        :param response_kwargs: Keyword arguments to pass on to the response constructor
         :param prioritize_content: Whether to prioritize the content over the exception detail.
             By default, the exception detail takes precedence over the content.
         :param callback: A callback to be called on exception capture. Should take the exception as an argument
@@ -282,11 +293,32 @@ class Capture(ViewContextDecorator):
         return super()._decorate_view_function(view)
 
 
+class CaptureKwargs(TypedDict):
+    """Mapping of keyword arguments for the `Capture` context manager."""
+
+    target: type[ErrorType] | Tuple[type[ErrorType]]
+    """Type of exception(s) to capture. Defaults to `BaseException`"""
+    content: Optional[Any]
+    """The content or message to be returned in the response. If not provided,
+        exception detail will be used. This can also be a callable that will take the exception captured,
+        process the result and return appropriate content to be returned in the response"""
+    code: int
+    """The status code of the response. Defaults to 500"""
+    response_type: Optional[ResponseType]
+    """Type of response to return. Defaults to `HttpResponse`"""
+    response_kwargs: Optional[Dict[str, Any]]
+    """Keyword arguments to pass on to the response constructor"""
+    prioritize_content: bool
+    """Whether to prioritize the content over the exception detail.
+        By default, the exception detail takes precedence over the content."""
+    callback: Optional[Callable[..., None]]
+    """A callback to be called on exception capture. Should take the exception as an argument"""
+    log_errors: bool
+    """Whether to log server errors, that is, status code 500. Defaults to True"""
+
+
 def capture(
-    target: type[ErrorType] | Tuple[type[ErrorType]] = None,
-    content: Optional[Any] = None,
-    code: int = 500,
-    **kwargs,
+    **kwargs: Unpack[CaptureKwargs],
 ) -> Capture:
     """
     Captures exception and gives a response.
@@ -317,7 +349,7 @@ def capture(
         raise ValueError("Invalid value")
     ```
     """
-    return Capture(target, content, code, **kwargs)
+    return Capture(**kwargs)
 
 
 def enable(view: Union[FBV, CBV]):

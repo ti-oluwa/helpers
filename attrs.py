@@ -1,46 +1,137 @@
 import typing
 import attrs
 import cattrs
+from typing import (
+    get_origin,
+    get_args,
+    TypeVar,
+    Callable,
+    Dict,
+    Type,
+    Any,
+)
+from .utils.misc import is_generic_type, is_mapping_type, is_iterable_type
 
-_AI = typing.TypeVar("_AI", bound=attrs.AttrsInstance)
+_AI = TypeVar("_AI", bound=attrs.AttrsInstance)
 
 
-def cast_on_set_factory(converter: cattrs.Converter):
-    def _cast_on_set(instance, attribute, value):
-        """
-        Cast the value to the attribute type if it exists and handle nested attrs classes.
-        Uses the provided converter for nested attrs classes.
-        """
-        if attrs.has(attribute.type):
-            # If the attribute is an attrs class, recursively structure it using the provided converter
-            return converter.structure(value, attribute.type)
-        
-        if getattr(attribute, "converter", None):
-            value = attribute.converter(value)
-        
-        try:
-            # Otherwise, cast it to the declared type
-            return attribute.type(value) if attribute.type else value
-        except (TypeError, ValueError):
-            # If not possible, return value as is
+def structure_to_generic_type(
+    value: Any, attr_type: Type[Any], converter: cattrs.Converter
+) -> Any:
+    """
+    Recursively handle generic types (List, Dict, Union, Optional, etc.) during structuring.
+
+    :param value: The value to structure.
+    :param attr_type: The type to structure the value to.
+    :param converter: The cattrs Converter instance to use.
+    :return: The structured value.
+    """
+    origin = get_origin(attr_type)
+    args = get_args(attr_type)
+
+    if origin is None:
+        return value
+
+    if origin is typing.Union:
+        # Handle Union[T1, T2, ...] or Optional[T] (which is Union[T, None])
+        if value is None and type(None) in args:
+            return None
+
+        for arg in args:
+            try:
+                return (
+                    converter.structure(value, arg)
+                    if not is_generic_type(arg)
+                    else structure_to_generic_type(value, arg, converter)
+                )
+            except (TypeError, ValueError):
+                continue
+        return value  # Return original value if no valid cast
+
+    if is_mapping_type(origin) and len(args) == 2:
+        # Handle Mapping[K, V] (like Dict[K, V])
+        _map = {}
+        for k, v in value.items():
+            _map_key = (
+                converter.structure(k, args[0])
+                if not is_generic_type(args[0])
+                else structure_to_generic_type(k, args[0], converter)
+            )
+            _map_value = (
+                converter.structure(v, args[1])
+                if not is_generic_type(args[1])
+                else structure_to_generic_type(v, args[1], converter)
+            )
+            _map[_map_key] = _map_value
+
+        return origin(_map)
+
+    if is_iterable_type(origin) and len(args) == 1:
+        # Handle Iterable[T] (like List[T], Set[T], etc.)
+        return origin(
+            converter.structure(v, args[0])
+            if not is_generic_type(args[0])
+            else structure_to_generic_type(v, args[0], converter)
+            for v in value
+        )
+
+    # Fallback for other generic types
+    try:
+        return origin(value)
+    except (TypeError, ValueError):
+        return value
+
+
+def cast_on_set_factory(
+    converter: cattrs.Converter,
+) -> Callable[[Any, attrs.Attribute, Any], Any]:
+    """
+    Factory function to create a casting function for attrs-based attributes.
+
+    :param converter: The cattrs Converter instance to use.
+    :return: A function that casts attribute values.
+    """
+
+    def _cast_on_set(instance: Any, attribute: attrs.Attribute, value: Any) -> Any:
+        attr_type = attribute.type
+        if attr_type is None:
             return value
+
+        if attrs.has(attr_type):
+            return converter.structure(value, attr_type)
+        elif is_generic_type(attr_type):
+            return structure_to_generic_type(value, attr_type, converter)
+        else:
+            try:
+                return attr_type(value)
+            except (TypeError, ValueError):
+                return value
 
     return _cast_on_set
 
 
-def structure_with_casting_factory(converter: cattrs.Converter):
+def structure_with_casting_factory(
+    converter: cattrs.Converter,
+) -> Callable[[Dict[str, Any], Type[_AI]], _AI]:
+    """
+    Factory function to create a structuring function that casts values to declared types.
+
+    :param converter: The cattrs Converter instance to use.
+    :return: A function that structures data into an attrs-based class.
+    """
+    cast_on_set = cast_on_set_factory(converter)
+
     def _structure_with_casting(
-        data: typing.Dict[str, typing.Any],
-        cls: typing.Type[_AI],
+        data: Dict[str, Any],
+        cls: Type[_AI],
     ) -> _AI:
         """
         Structuring hook for cattrs converters that casts values to the declared type.
 
-        Supports nested attrs-based classes and uses the provided converter.
+        :param data: The data to structure.
+        :param cls: The attrs-based class to structure the data into.
+        :return: An instance of the attrs-based class.
         """
-        cast_on_set = cast_on_set_factory(converter)
-        
-        # Explicitly fetch the value using attr.name to avoid mismatch issues
         return cls(
             **{
                 attr.name: cast_on_set(None, attr, data.get(attr.name))
@@ -51,27 +142,111 @@ def structure_with_casting_factory(converter: cattrs.Converter):
     return _structure_with_casting
 
 
-def unstructure_with_casting_factory(converter: cattrs.Converter):
-    def _unstructure_with_casting(instance):
+def unstructure_as_generic_type(
+    value: Any, attr_type: Type[Any], converter: cattrs.Converter
+) -> Any:
+    """
+    Recursively handle unstructuring of generic types (List, Dict, Union, Optional, etc.)
+    using cattrs.Converter and applying the unstructure_as argument when appropriate.
+
+    :param value: The value to unstructure.
+    :param attr_type: The type to unstructure the value to.
+    :param converter: The cattrs Converter instance to use.
+    :return: The unstructured value.
+    """
+    origin = get_origin(attr_type)
+    args = get_args(attr_type)
+
+    if origin is None:
+        return value
+
+    if origin is typing.Union:
+        # Handle Union[T1, T2, ...] or Optional[T] (which is Union[T, None])
+        if value is None and type(None) in args:
+            return None
+
+        for arg in args:
+            try:
+                return (
+                    converter.unstructure(value, unstructure_as=arg)
+                    if not is_generic_type(arg)
+                    else unstructure_as_generic_type(value, arg, converter)
+                )
+            except (TypeError, ValueError):
+                continue
+        return value  # Return original value if no valid cast
+
+    if is_mapping_type(origin) and len(args) == 2:
+        # Handle Mapping[K, V] (like Dict[K, V])
+        _map = {}
+        for k, v in value.items():
+            _map_key = (
+                converter.unstructure(k, unstructure_as=args[0])
+                if not is_generic_type(args[0])
+                else unstructure_as_generic_type(k, args[0], converter)
+            )
+            _map_value = (
+                converter.unstructure(v, unstructure_as=args[1])
+                if not is_generic_type(args[1])
+                else unstructure_as_generic_type(v, args[1], converter)
+            )
+            _map[_map_key] = _map_value
+
+        return origin(_map)
+
+    if is_iterable_type(origin) and len(args) == 1:
+        # Handle Iterable[T] (like List[T], Set[T], etc.)
+        return origin(
+            converter.unstructure(v, unstructure_as=args[0])
+            if not is_generic_type(args[0])
+            else unstructure_as_generic_type(v, args[0], converter)
+            for v in value
+        )
+
+    # Fallback for other generic types
+    try:
+        return converter.unstructure(value, unstructure_as=origin)
+    except (TypeError, ValueError):
+        return value
+
+
+def unstructure_with_casting_factory(
+    converter: cattrs.Converter,
+) -> Callable[[Any], Dict[str, Any]]:
+    """
+    Factory function to create an unstructuring function that casts values to declared types.
+
+    :param converter: The cattrs Converter instance to use.
+    :return: A function that unstructures an attrs-based class instance into a dictionary.
+    """
+
+    def _unstructure_with_casting(instance: Any) -> Dict[str, Any]:
         """
         Unstructures the attrs-based class instance and casts values to their declared types.
 
-        Handles both base and subclass instances, as well as nested attrs-based classes.
-        Non-attrs types are unstructured using the provided converter.
+        :param instance: The attrs-based class instance to unstructure.
+        :return: A dictionary representation of the instance.
         """
         if not attrs.has(instance.__class__):
+            # Fallback to converter's default unstructuring for non-attrs classes
             return converter.unstructure(instance)
 
         data = {}
         for attr in instance.__attrs_attrs__:
             value = getattr(instance, attr.name)
+            attr_type = attr.type
 
-            if attrs.has(attr.type):
-                # If the attribute is an attrs class, recursively unstructure it using the provided converter
-                data[attr.name] = _unstructure_with_casting(value)
+            if attr_type is None:
+                data[attr.name] = value
+            elif is_generic_type(attr_type):
+                data[attr.name] = unstructure_as_generic_type(
+                    value, attr_type, converter
+                )
             else:
-                # Delegate non-attrs types to the converter (useful for lists, dicts, or custom types)
-                data[attr.name] = converter.unstructure(value)
+                try:
+                    data[attr.name] = attr_type(value)
+                except (TypeError, ValueError):
+                    data[attr.name] = value
 
         return data
 

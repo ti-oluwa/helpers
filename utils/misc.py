@@ -1,9 +1,40 @@
 from inspect import isclass
+import collections.abc
 from io import BytesIO
-from typing import Union, Callable, Any, TypeVar, Dict
+from typing import Union, Callable, Any, TypeVar, Dict, Type
 import base64
 
 from .choice import ExtendedEnum
+
+
+def has_method(obj: Any, method_name: str) -> bool:
+    """Check if an object or type has a specific method."""
+    return callable(getattr(obj, method_name, None))
+
+
+def type_implements_iter(tp: Type[Any]) -> bool:
+    """Check if the type has an __iter__ method (like lists, sets, etc.)."""
+    return has_method(tp, "__iter__")
+
+
+def is_mapping_type(tp: Type[Any]) -> bool:
+    """Check if a given type is a mapping (like dict)."""
+    return isinstance(tp, type) and issubclass(tp, collections.abc.Mapping)
+
+
+def is_iterable_type(tp: Type[Any]) -> bool:
+    """Check if a given type is an iterable (like list, set, tuple), but not a string."""
+    # Exclude str from being considered an iterable for this use case
+    return (
+        isinstance(tp, type)
+        and issubclass(tp, collections.abc.Iterable)
+        and not issubclass(tp, (str, bytes))
+    )
+
+
+def is_generic_type(tp: Type[Any]) -> bool:
+    """Check if a type is a generic type like List[str], Dict[str, int], etc."""
+    return hasattr(tp, "__origin__")
 
 
 def is_exception_class(exc):
@@ -178,7 +209,7 @@ def comma_separated_to_int_float(value: str) -> Union[int, float]:
         return value
     if not value:
         return value
-    
+
     try:
         stripped_value = "".join(value.split(","))
         if "." in stripped_value:
@@ -224,7 +255,7 @@ def python_type_to_html_input_type(py_type: type) -> str:
         return "text"  # Handling complex types can vary
     if issubclass(py_type, bytes):
         return "file"
-    
+
     # Default case for unsupported types
     return "text"
 
@@ -242,5 +273,5 @@ __all__ = [
     "merge_enums",
     "get_dict_diff",
     "underscore_dict_keys",
-    "python_type_to_html_input_type"
+    "python_type_to_html_input_type",
 ]

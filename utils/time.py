@@ -12,7 +12,7 @@ class _timeit(ContextDecorator):
         Create a new instance of the _timeit class.
 
         :param identifier: A unique identifier for the function or block.
-        :param output: The output/writer function to use. This defaults to sys.stdout.write.
+        :param output: The output/writer function to use. This defaults to `sys.stdout.write`.
         """
         self.identifier = identifier
         self.start = None
