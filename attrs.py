@@ -2,6 +2,7 @@ import typing
 import attrs
 import cattrs
 from typing import (
+    Generic,
     get_origin,
     get_args,
     TypeVar,
@@ -13,6 +14,50 @@ from typing import (
 from .utils.misc import is_generic_type, is_mapping_type, is_iterable_type
 
 _AI = TypeVar("_AI", bound=attrs.AttrsInstance)
+T = TypeVar("T")
+
+
+class NoCast(Generic[T]):
+    """Wrapper class to indicate that a type should not be cast during structuring and unstructuring."""
+
+    def __init__(self, wrapped_type: Type[T]):
+        self.wrapped_type = wrapped_type
+
+    def __repr__(self) -> str:
+        return f"NoCast[{self.wrapped_type}]"
+
+    def __eq__(self, other):
+        return isinstance(other, NoCast) and self.wrapped_type == other.wrapped_type
+
+    def __hash__(self):
+        return hash(self.wrapped_type)
+
+    # This makes NoCast to be considered as a generic type
+    @property
+    def __origin__(self):
+        return self.wrapped_type
+
+    @property
+    def __args__(self):
+        return (self.wrapped_type,)
+
+
+def unwrap_nocast_type(attr_type: Type[Any]) -> Type[Any]:
+    """
+    Return the wrapped type if the type is wrapped in NoCast, 
+    otherwise return the type as is.
+    """
+    origin = get_origin(attr_type)
+    if origin is NoCast:
+        return get_args(attr_type)[0]
+    return attr_type
+
+
+def is_nocast_type(attr_type: Type[Any]) -> bool:
+    """
+    Check if the type is wrapped in NoCast.
+    """
+    return get_origin(attr_type) is NoCast
 
 
 def structure_to_generic_type(
@@ -20,12 +65,12 @@ def structure_to_generic_type(
 ) -> Any:
     """
     Recursively handle generic types (List, Dict, Union, Optional, etc.) during structuring.
-
-    :param value: The value to structure.
-    :param attr_type: The type to structure the value to.
-    :param converter: The cattrs Converter instance to use.
-    :return: The structured value.
+    If the type is wrapped in NoCast, return the value as is without casting.
     """
+    if is_nocast_type(attr_type):
+        return value  # Skip casting if NoCast is applied
+
+    attr_type = unwrap_nocast_type(attr_type)
     origin = get_origin(attr_type)
     args = get_args(attr_type)
 
@@ -33,7 +78,6 @@ def structure_to_generic_type(
         return value
 
     if origin is typing.Union:
-        # Handle Union[T1, T2, ...] or Optional[T] (which is Union[T, None])
         if value is None and type(None) in args:
             return None
 
@@ -46,10 +90,9 @@ def structure_to_generic_type(
                 )
             except (TypeError, ValueError):
                 continue
-        return value  # Return original value if no valid cast
+        return value
 
     if is_mapping_type(origin) and len(args) == 2:
-        # Handle Mapping[K, V] (like Dict[K, V])
         _map = {}
         for k, v in value.items():
             _map_key = (
@@ -63,11 +106,9 @@ def structure_to_generic_type(
                 else structure_to_generic_type(v, args[1], converter)
             )
             _map[_map_key] = _map_value
-
         return origin(_map)
 
     if is_iterable_type(origin) and len(args) == 1:
-        # Handle Iterable[T] (like List[T], Set[T], etc.)
         return origin(
             converter.structure(v, args[0])
             if not is_generic_type(args[0])
@@ -75,7 +116,6 @@ def structure_to_generic_type(
             for v in value
         )
 
-    # Fallback for other generic types
     try:
         return origin(value)
     except (TypeError, ValueError):
@@ -87,15 +127,18 @@ def cast_on_set_factory(
 ) -> Callable[[Any, attrs.Attribute, Any], Any]:
     """
     Factory function to create a casting function for attrs-based attributes.
-
-    :param converter: The cattrs Converter instance to use.
-    :return: A function that casts attribute values.
+    Skips casting for attributes wrapped in NoCast.
     """
 
     def _cast_on_set(instance: Any, attribute: attrs.Attribute, value: Any) -> Any:
         attr_type = attribute.type
         if attr_type is None:
             return value
+
+        if is_nocast_type(attr_type):
+            return value  # Skip casting if NoCast is applied
+
+        attr_type = unwrap_nocast_type(attr_type)
 
         if attrs.has(attr_type):
             return converter.structure(value, attr_type)
@@ -154,6 +197,10 @@ def unstructure_as_generic_type(
     :param converter: The cattrs Converter instance to use.
     :return: The unstructured value.
     """
+    if is_nocast_type(attr_type):
+        return value  # Skip casting if NoCast is applied
+
+    attr_type = unwrap_nocast_type(attr_type)
     origin = get_origin(attr_type)
     args = get_args(attr_type)
 
@@ -237,7 +284,12 @@ def unstructure_with_casting_factory(
             attr_type = attr.type
 
             if attr_type is None:
+                # Skip if the attribute has no type
                 data[attr.name] = value
+            elif is_nocast_type(attr_type):
+                # Skip casting if NoCast is applied
+                data[attr.name] = value
+
             elif is_generic_type(attr_type):
                 data[attr.name] = unstructure_as_generic_type(
                     value, attr_type, converter

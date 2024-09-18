@@ -3,7 +3,8 @@ import mimetypes
 import imghdr
 import os
 from io import BytesIO
-from typing import Any, Callable, Dict, Optional, TypeVar, Union, Tuple, Coroutine
+from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional, TypeVar, Union, Tuple, Coroutine
 from django.core.files import File as DjangoFile
 from django.core.files.uploadedfile import InMemoryUploadedFile
 import httpx
@@ -193,30 +194,31 @@ IMAGE_EXTENSIONS = ("jpg", "jpeg", "png", "gif", "bmp", "webp", "tiff", "svg", "
 VIDEO_EXTENSIONS = ("mp4", "webm", "mkv", "flv", "avi", "mov", "wmv", "mpg", "mpeg")
 AUDIO_EXTENSIONS = ("mp3", "wav", "ogg", "flac", "aac", "wma", "m4a", "opus")
 
+
 def infer_file_type(file: Union[str, DjangoFile]) -> str:
     """
     Infers the type of a file (video, image, audio, ...) based on its content or extension.
 
     :param file: The path to the file whose type needs to be determined.
 
-    :return: The inferred file type, which can be "video", "image", "audio", "<ext>" or "unknown" 
+    :return: The inferred file type, which can be "video", "image", "audio", "<ext>" or "unknown"
          if the file type cannot be determined.
     """
     # Check if it's an image by inspecting the file header
     if imghdr.what(file):
         return "image"
-    
+
     # Infer file type using the MIME type based on file extension
     if isinstance(file, DjangoFile):
         file = file.name
-    
+
     mime_type, _ = mimetypes.guess_type(file)
     if mime_type:
         if mime_type.startswith("video"):
             return "video"
         elif mime_type.startswith("audio"):
             return "audio"
-    
+
     return infer_file_type_from_extension(file)
 
 
@@ -226,7 +228,7 @@ def infer_file_type_from_extension(file: str):
 
     :param file: The path to the file whose type needs to be determined.
 
-    :return: The inferred file type, which can be "video", "image", "audio", "<ext>" or "unknown" 
+    :return: The inferred file type, which can be "video", "image", "audio", "<ext>" or "unknown"
          if the file type cannot be determined.
     """
     _, ext = os.path.splitext(file)
@@ -239,5 +241,74 @@ def infer_file_type_from_extension(file: str):
         if ext in AUDIO_EXTENSIONS:
             return "audio"
         return ext
-    
+
     return "unknown"
+
+
+def find_files_by_extension(
+    directory: str, extensions: Tuple[str, ...], search_sub_dirs: bool = False
+) -> Dict[str, List[Path]]:
+    """
+    Finds all files with specified extensions in a directory.
+    Groups files found by extension.
+
+    :param directory: The directory to search for files.
+    :param search_sub_dirs: Whether to search subdirectories.
+    :param extensions: A tuple of file extensions to search for.
+
+    :return: A mapping of file extensions to a list of file paths.
+    """
+    files = {}
+    if not os.path.isdir(directory):
+        raise ValueError(f"Invalid directory: {directory}")
+
+    for root, _, filenames in os.walk(directory):
+        for filename in filenames:
+            _, ext = os.path.splitext(filename)
+            ext = ext[1:].lower()
+            if ext in extensions:
+                path = Path(os.path.join(root, filename)).resolve()
+                files.setdefault(ext, []).append(path)
+
+        if not search_sub_dirs:
+            break
+    return files
+
+
+def path_to_in_memory_file(path: Union[Path, str]) -> InMemoryUploadedFile:
+    """
+    Converts a file path to an `InMemoryUploadedFile`.
+
+    :param path: The path to the file.
+
+    :return: The file as an `InMemoryUploadedFile`.
+    """
+    with open(path, "rb") as file:
+        file_io = BytesIO(file.read())
+        return InMemoryUploadedFile(
+            file_io,
+            field_name=None,
+            name=path.name,
+            content_type=mimetypes.guess_type(path.name)[0],
+            size=file_io.getbuffer().nbytes,
+            charset=None,
+        )
+
+
+def paths_to_in_memory_files(paths: List[Path]) -> List[InMemoryUploadedFile]:
+    if not paths:
+        return []
+    
+    # If there's only one path, there's no need to run the async function
+    if len(paths) == 1:
+        return [path_to_in_memory_file(paths[0])]
+
+    async def main():
+        async_path_to_in_memory_file = sync_to_async(path_to_in_memory_file)
+        tasks = []
+        for path in paths:
+            task = asyncio.create_task(async_path_to_in_memory_file(path))
+            tasks.append(task)
+        return await asyncio.gather(*tasks)
+
+    return asyncio.run(main())
