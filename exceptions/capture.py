@@ -19,6 +19,7 @@ from typing import (
     Union,
     TypedDict,
     Unpack,
+    Type,
 )
 from django.http import HttpResponse, Http404
 from django.core.exceptions import PermissionDenied, BadRequest, ValidationError
@@ -109,7 +110,7 @@ class Capture(ViewContextDecorator):
 
     def __init__(
         self,
-        target: type[ErrorType] | Tuple[type[ErrorType]] = None,
+        target: Optional[Union[Type[ErrorType], Tuple[Type[ErrorType]]]] = None,
         content: Optional[Any] = None,
         code: int = 500,
         response_type: Optional[ResponseType] = None,
@@ -295,9 +296,7 @@ class Capture(ViewContextDecorator):
 
 class CaptureKwargs(TypedDict):
     """Mapping of keyword arguments for the `Capture` context manager."""
-
-    target: type[ErrorType] | Tuple[type[ErrorType]]
-    """Type of exception(s) to capture. Defaults to `BaseException`"""
+    
     content: Optional[Any]
     """The content or message to be returned in the response. If not provided,
         exception detail will be used. This can also be a callable that will take the exception captured,
@@ -318,6 +317,7 @@ class CaptureKwargs(TypedDict):
 
 
 def capture(
+    target: Optional[Union[Type[ErrorType], Tuple[Type[ErrorType]]]] = None,
     **kwargs: Unpack[CaptureKwargs],
 ) -> Capture:
     """
@@ -349,7 +349,7 @@ def capture(
         raise ValueError("Invalid value")
     ```
     """
-    return Capture(**kwargs)
+    return Capture(target, **kwargs)
 
 
 def enable(view: Union[FBV, CBV]):
