@@ -29,7 +29,7 @@ def send_smtp_mail(
     connection = connection or get_smtp_connection()
     app_name = get_app_name()
     if app_name:
-        sender = f"{settings.APPLICATION_NAME} <{from_email}>"
+        sender = f"{app_name} <{from_email}>"
     else:
         sender = from_email
 
