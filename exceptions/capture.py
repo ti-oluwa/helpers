@@ -18,9 +18,9 @@ from typing import (
     Optional,
     Union,
     TypedDict,
-    Unpack,
     Type,
 )
+from typing_extensions import Unpack
 from django.http import HttpResponse, Http404
 from django.core.exceptions import PermissionDenied, BadRequest, ValidationError
 import functools
