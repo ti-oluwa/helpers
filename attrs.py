@@ -11,6 +11,7 @@ from typing import (
     Type,
     Any,
 )
+import collections.abc
 from .utils.misc import is_generic_type, is_mapping_type, is_iterable_type
 
 _AI = TypeVar("_AI", bound=attrs.AttrsInstance)
@@ -67,6 +68,9 @@ def structure_to_generic_type(
     Recursively handle generic types (List, Dict, Union, Optional, etc.) during structuring.
     If the type is wrapped in NoCast, return the value as is without casting.
     """
+    if attr_type is typing.Any:
+        return converter.structure(value, type(value))
+
     if is_nocast_type(attr_type):
         return value  # Skip casting if NoCast is applied
 
@@ -106,20 +110,32 @@ def structure_to_generic_type(
                 else structure_to_generic_type(v, args[1], converter)
             )
             _map[_map_key] = _map_value
-        return origin(_map)
+
+        if is_generic_type(origin) or issubclass(origin, collections.abc.Mapping):
+            return _map
+        else:
+            return origin(_map)
 
     if is_iterable_type(origin) and len(args) == 1:
-        return origin(
+        _iter = [
             converter.structure(v, args[0])
             if not is_generic_type(args[0])
             else structure_to_generic_type(v, args[0], converter)
             for v in value
-        )
+        ]
+
+        if is_generic_type(origin) or issubclass(origin, collections.abc.Iterable):
+            return _iter
+        else:
+            return origin(_iter)
 
     try:
         return origin(value)
-    except (TypeError, ValueError):
-        return value
+    except (TypeError, ValueError, cattrs.errors.StructureHandlerNotFoundError):
+        try:
+            return converter.structure(value, type(value))
+        except cattrs.errors.StructureHandlerNotFoundError:
+            return value
 
 
 def cast_on_set_factory(
@@ -146,10 +162,13 @@ def cast_on_set_factory(
             return structure_to_generic_type(value, attr_type, converter)
         else:
             try:
-                return attr_type(value)
-            except (TypeError, ValueError):
-                return value
-
+                return converter.structure(value, attr_type)
+            except (TypeError, ValueError, cattrs.errors.StructureHandlerNotFoundError):
+                try:
+                    return converter.structure(value, type(value))
+                except cattrs.errors.StructureHandlerNotFoundError:
+                    return value
+    
     return _cast_on_set
 
 
@@ -203,6 +222,9 @@ def unstructure_as_generic_type(
     :param converter: The cattrs Converter instance to use.
     :return: The unstructured value.
     """
+    if attr_type is typing.Any:
+        return converter.unstructure(value, unstructure_as=type(value))
+
     if is_nocast_type(attr_type):
         return value  # Skip casting if NoCast is applied
 
@@ -245,22 +267,30 @@ def unstructure_as_generic_type(
             )
             _map[_map_key] = _map_value
 
-        return origin(_map)
+        if is_generic_type(origin) or issubclass(origin, collections.abc.Mapping):
+            return _map
+        else:
+            return origin(_map)
 
     if is_iterable_type(origin) and len(args) == 1:
         # Handle Iterable[T] (like List[T], Set[T], etc.)
-        return origin(
+        _iter = [
             converter.unstructure(v, unstructure_as=args[0])
             if not is_generic_type(args[0])
             else unstructure_as_generic_type(v, args[0], converter)
             for v in value
-        )
+        ]
+
+        if is_generic_type(origin) or issubclass(origin, collections.abc.Iterable):
+            return _iter
+        else:
+            return origin(_iter)
 
     # Fallback for other generic types
     try:
         return converter.unstructure(value, unstructure_as=origin)
     except (TypeError, ValueError):
-        return value
+        return converter.unstructure(value, unstructure_as=type(value))
 
 
 def unstructure_with_casting_factory(
@@ -297,9 +327,13 @@ def unstructure_with_casting_factory(
                 )
             else:
                 try:
-                    data[attr.alias or attr.name] = attr_type(value)
+                    data[attr.alias or attr.name] = converter.unstructure(
+                        value, unstructure_as=attr_type
+                    )
                 except (TypeError, ValueError):
-                    data[attr.alias or attr.name] = value
+                    data[attr.alias or attr.name] = converter.unstructure(
+                        value, unstructure_as=type(value)
+                    )
 
         return data
 
