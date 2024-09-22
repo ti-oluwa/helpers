@@ -44,7 +44,7 @@ class NoCast(Generic[T]):
 
 def unwrap_nocast_type(attr_type: Type[Any]) -> Type[Any]:
     """
-    Return the wrapped type if the type is wrapped in NoCast, 
+    Return the wrapped type if the type is wrapped in NoCast,
     otherwise return the type as is.
     """
     origin = get_origin(attr_type)
@@ -158,10 +158,9 @@ def structure_with_casting_factory(
 ) -> Callable[[Dict[str, Any], Type[_AI]], _AI]:
     """
     Factory function to create a structuring function that casts values to declared types.
-
-    :param converter: The cattrs Converter instance to use.
-    :return: A function that structures data into an attrs-based class.
+    Considers attribute aliases and uses them to fetch values from the input dictionary.
     """
+
     cast_on_set = cast_on_set_factory(converter)
 
     def _structure_with_casting(
@@ -171,13 +170,20 @@ def structure_with_casting_factory(
         """
         Structuring hook for cattrs converters that casts values to the declared type.
 
+        Considers attribute aliases while structuring.
         :param data: The data to structure.
         :param cls: The attrs-based class to structure the data into.
         :return: An instance of the attrs-based class.
         """
         return cls(
             **{
-                attr.name: cast_on_set(None, attr, data.get(attr.name))
+                attr.alias or attr.name: cast_on_set(
+                    None,
+                    attr,
+                    data.get(
+                        attr.alias or attr.name  # Use alias if provided
+                    ),
+                )
                 for attr in cls.__attrs_attrs__
             }
         )
@@ -262,17 +268,13 @@ def unstructure_with_casting_factory(
 ) -> Callable[[Any], Dict[str, Any]]:
     """
     Factory function to create an unstructuring function that casts values to declared types.
-
-    :param converter: The cattrs Converter instance to use.
-    :return: A function that unstructures an attrs-based class instance into a dictionary.
+    Considers attribute aliases when unstructuring.
     """
 
     def _unstructure_with_casting(instance: Any) -> Dict[str, Any]:
         """
         Unstructures the attrs-based class instance and casts values to their declared types.
-
-        :param instance: The attrs-based class instance to unstructure.
-        :return: A dictionary representation of the instance.
+        Considers attribute aliases while unstructuring.
         """
         if not attrs.has(instance.__class__):
             # Fallback to converter's default unstructuring for non-attrs classes
@@ -285,20 +287,19 @@ def unstructure_with_casting_factory(
 
             if attr_type is None:
                 # Skip if the attribute has no type
-                data[attr.name] = value
+                data[attr.alias or attr.name] = value
             elif is_nocast_type(attr_type):
                 # Skip casting if NoCast is applied
-                data[attr.name] = value
-
+                data[attr.alias or attr.name] = value
             elif is_generic_type(attr_type):
-                data[attr.name] = unstructure_as_generic_type(
+                data[attr.alias or attr.name] = unstructure_as_generic_type(
                     value, attr_type, converter
                 )
             else:
                 try:
-                    data[attr.name] = attr_type(value)
+                    data[attr.alias or attr.name] = attr_type(value)
                 except (TypeError, ValueError):
-                    data[attr.name] = value
+                    data[attr.alias or attr.name] = value
 
         return data
 
