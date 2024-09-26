@@ -1,5 +1,6 @@
 import typing
 import datetime
+from django.utils import timezone as django_timezone
 
 try:
     import zoneinfo
@@ -7,7 +8,6 @@ except ImportError:
     from backports import zoneinfo
 
 
-# NOTE: This is not a perfect implementation, as not all edge cases have been consider.
 def split(
     start: typing.Union[datetime.date, datetime.datetime],
     end: typing.Union[datetime.date, datetime.datetime],
@@ -231,12 +231,12 @@ def timedelta_code_to_datetime_range(
     """
     delta = timedelta_code_to_timedelta(timdelta_code)
     tz = zoneinfo.ZoneInfo(timezone) if timezone else None
-    now = datetime.datetime.now().astimezone(tz)
-
+    now_in_tz = django_timezone.now().astimezone(tz)
+    
     if future:
-        start = now
-        end = now + delta
+        start = now_in_tz
+        end = now_in_tz + delta
     else:
-        start = now - delta
-        end = now
+        start = now_in_tz - delta
+        end = now_in_tz
     return start, end

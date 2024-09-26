@@ -1,3 +1,7 @@
+from helpers.dependencies import required_deps
+
+required_deps({"geopy": "geopy"})
+
 try:
     from geopy.distance import geodesic, great_circle
 except ImportError:

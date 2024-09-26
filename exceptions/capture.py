@@ -7,6 +7,16 @@ Use the `capture.enable` decorator to enable for specifc views only, especially,
 """
 
 from __future__ import annotations
+
+from helpers.dependencies import required_deps
+
+required_deps(
+    {
+        "django": "https://www.djangoproject.com/",
+        "typing_extensions": "typing-extensions",
+    }
+)
+
 import json
 from typing import (
     Any,
@@ -296,7 +306,7 @@ class Capture(ViewContextDecorator):
 
 class CaptureKwargs(TypedDict):
     """Mapping of keyword arguments for the `Capture` context manager."""
-    
+
     content: Optional[Any]
     """The content or message to be returned in the response. If not provided,
         exception detail will be used. This can also be a callable that will take the exception captured,

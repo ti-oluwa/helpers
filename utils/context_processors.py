@@ -1,3 +1,7 @@
+from helpers.dependencies import required_deps
+
+required_deps({"django": "https://www.djangoproject.com/"})
+
 from django.conf import settings
 from django.utils import timezone
 

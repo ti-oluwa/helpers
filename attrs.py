@@ -1,3 +1,10 @@
+from .dependencies import required_deps
+
+required_deps({
+    "attrs": "https://www.attrs.org/en/stable/",
+    "cattrs": "https://pypi.org/project/cattrs/",
+})
+
 import typing
 import attrs
 import cattrs

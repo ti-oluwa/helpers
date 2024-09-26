@@ -1,3 +1,10 @@
+from helpers.dependencies import required_deps
+
+required_deps(
+    {"django": "https://www.djangoproject.com/", "httpx": "httpx", "asgiref": "asgiref"}
+)
+
+
 import functools
 import mimetypes
 import imghdr
@@ -298,7 +305,7 @@ def path_to_in_memory_file(path: Union[Path, str]) -> InMemoryUploadedFile:
 def paths_to_in_memory_files(paths: List[Path]) -> List[InMemoryUploadedFile]:
     if not paths:
         return []
-    
+
     # If there's only one path, there's no need to run the async function
     if len(paths) == 1:
         return [path_to_in_memory_file(paths[0])]

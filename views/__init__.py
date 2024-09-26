@@ -1,3 +1,7 @@
+from helpers.dependencies import required_deps
+
+required_deps({"django": "https://www.djangoproject.com/"})
+
 from inspect import isclass
 from django.views import View
 from django.http import HttpResponse
