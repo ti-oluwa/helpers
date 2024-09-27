@@ -1,3 +1,7 @@
+from .dependencies import required_deps
+
+required_deps({"django": "https://www.djangoproject.com/"})
+
 import re
 import typing
 from ipaddress import ip_address

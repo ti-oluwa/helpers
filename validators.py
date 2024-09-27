@@ -1,3 +1,7 @@
+from .dependencies import required_deps
+
+required_deps({"django": "https://www.djangoproject.com/"})
+
 import enum
 from typing import Any, Optional, Union
 from django.core.exceptions import ValidationError

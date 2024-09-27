@@ -1,3 +1,7 @@
+from helpers.dependencies import required_deps, depends_on
+
+required_deps({"django": "https://www.djangoproject.com/"})
+
 from typing import Optional
 import io
 import os
@@ -13,6 +17,7 @@ from .misc import (
 from .files import download, _File
 
 
+@depends_on({"PIL": "Pillow"})
 def compress_image(
     image: DjangoFile, *, quality: int = 90, format: Optional[str] = None
 ) -> InMemoryUploadedFile:
@@ -40,6 +45,7 @@ def compress_image(
     return in_memory_file
 
 
+@depends_on({"PIL": "Pillow"})
 def enhance_image(
     image: DjangoFile,
     *,
@@ -85,6 +91,7 @@ def enhance_image(
     return in_memory_file
 
 
+@depends_on({"cv2": "opencv-python-headless", "numpy": "numpy"})
 def denoise_image(image: DjangoFile) -> InMemoryUploadedFile:
     """
     Denoise an image using histogram equalization and non-local means denoising.

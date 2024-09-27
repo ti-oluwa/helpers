@@ -1,3 +1,7 @@
+from helpers.dependencies import required_deps
+
+required_deps({"asgiref": "asgiref"})
+
 from django.utils import timezone
 import datetime
 

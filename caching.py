@@ -1,3 +1,7 @@
+from .dependencies import required_deps
+
+required_deps({"cachetools": "cachetools"})
+
 import functools
 from typing import Callable, TypeVar, Coroutine, Any
 from cachetools import TTLCache

@@ -1,3 +1,7 @@
+from helpers.dependencies import required_deps
+
+required_deps({"asgiref": "asgiref"})
+
 import re
 import os
 import asyncio
@@ -14,9 +18,9 @@ from .format import drf_response_formatter, Formatter
 from ..logging import log_exception
 
 
-class FormatResponseMiddleware(MiddlewareMixin):
+class FormatJSONResponseMiddleware(MiddlewareMixin):
     """
-    Middleware to format response data to a consistent format.
+    Middleware to format JSON response data to a consistent format (as defined by formatter).
 
     In settings.py:
 
@@ -32,7 +36,9 @@ class FormatResponseMiddleware(MiddlewareMixin):
     """
 
     default_formatter = drf_response_formatter
+    """The default response formatter."""
     setting_name = "RESPONSE_FORMATTER"
+    """The name of the setting for the middleware in the helpers settings."""
 
     def __init__(
         self, get_response: Callable[[HttpRequest], HttpResponse] | None = ...
@@ -59,7 +65,28 @@ class FormatResponseMiddleware(MiddlewareMixin):
             return async_to_sync(formatter)
         return formatter
 
+    def check_is_json_response(self, response: HttpResponse) -> bool:
+        """
+        Check if the response is a JSON response.
+
+        :param response: The response object.
+        :return: True if the response is a JSON response, False otherwise.
+        """
+        return response.get("Content-Type", "").startswith("application/json")
+
     def can_format(self, request: HttpRequest, response: HttpResponse) -> bool:
+        """
+        Check if the response can be formatted.
+
+        :param request: The request object.
+        :param response: The response object.
+        :return: True if the response can be formatted, False otherwise.
+        """
+        if not self.settings()["enforce_format"] and not self.check_is_json_response(
+            response
+        ):
+            return False
+
         excluded_paths: List[str] = self.settings()["exclude"]
         request_path = request.get_full_path()
 
@@ -70,6 +97,13 @@ class FormatResponseMiddleware(MiddlewareMixin):
         return True
 
     def format(self, request: HttpRequest, response: HttpResponse) -> HttpResponse:
+        """
+        Format the response.
+
+        :param request: The request object.
+        :param response: The response object.
+        :return: The formatted response object.
+        """
         if not self.can_format(request, response):
             return response
 

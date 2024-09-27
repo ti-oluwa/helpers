@@ -1,3 +1,7 @@
+from helpers.dependencies import required_deps
+
+required_deps({"asgiref": "asgiref"})
+
 import functools
 from django.http import HttpResponse
 from typing import Callable, Optional, Dict, Any, Coroutine

@@ -1,3 +1,7 @@
+from helpers.dependencies import required_deps
+
+required_deps({"asgiref": "asgiref"})
+
 import re
 from typing import Callable, Any, Union, Dict, Optional
 import functools

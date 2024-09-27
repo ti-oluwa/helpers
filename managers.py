@@ -1,4 +1,9 @@
 from __future__ import annotations
+
+from .dependencies import required_deps
+
+required_deps({"django": "https://www.djangoproject.com/"})
+
 import functools
 import inspect
 from typing import Any, Optional, TypeVar, Union, List, Generic, Type, Callable
