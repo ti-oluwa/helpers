@@ -34,7 +34,7 @@ def is_iterable_type(tp: Type[Any]) -> bool:
 
 def is_generic_type(tp: Type[Any]) -> bool:
     """Check if a type is a generic type like List[str], Dict[str, int], etc."""
-    return hasattr(tp, "__origin__")
+    return hasattr(tp, "__origin__") or tp is Any
 
 
 def is_exception_class(exc):
