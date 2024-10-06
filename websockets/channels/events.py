@@ -1,10 +1,10 @@
 import typing
 import json
 from dataclasses import dataclass, KW_ONLY
-from django.core.exceptions import ValidationError
 from django.utils.translation import gettext as _
 
 from helpers.utils.choice import ExtendedEnum
+from .exceptions import InvalidData
 
 
 class BaseEventType(ExtendedEnum):
@@ -19,12 +19,6 @@ class EventType(BaseEventType):
     Ping = _("ping")
     Pong = _("pong")
     ErrorOccurred = _("error_occurred")
-
-
-class InvalidData(ValidationError):
-    """Validation error for invalid data in an event."""
-
-    pass
 
 
 @dataclass(slots=True)
