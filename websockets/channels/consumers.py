@@ -12,6 +12,33 @@ from helpers.utils.misc import merge_enums
 from helpers.utils.choice import ExtendedEnum
 
 
+ERROR_ATTRIBUTES = ("detail", "message_dict", "error_dict", "error_list")
+
+
+def _clean_errors(errors: typing.Any):
+    if not errors:
+        return errors
+    
+    if isinstance(errors, dict):
+        cleaned_errors = {}
+        for key, error in errors.items():
+            cleaned_errors[key] = _clean_errors(error)
+        return cleaned_errors
+    
+    elif isinstance(errors, (list, set, tuple)):
+        cleaned_errors = []
+        for error in errors:
+            cleaned_errors.append(_clean_errors(error))
+        return cleaned_errors
+    
+    elif isinstance(errors, BaseException):
+        if errors.args:
+            if not inspect.isroutine(errors.args[0]):
+                return _clean_errors(errors.args[0])
+
+    return str(errors)
+
+
 @asynccontextmanager
 async def capture_exception(
     consumer: AsyncConsumer, exc_class: typing.Type[Exception] = None
@@ -26,12 +53,17 @@ async def capture_exception(
         if not isinstance(message, str):
             message = "An error occurred"
 
-        errors = getattr(exc, "detail", None) or getattr(exc, "message_dict", None)
+        errors = None
+        for attr_name in ERROR_ATTRIBUTES:
+            errors = getattr(exc, attr_name, None)
+            if errors is not None:
+                break
+
         outgoing_event = OutgoingEvent(
             type=EventType.ErrorOccurred,
             status=EventStatus.ERROR,
             message=message,
-            errors=errors,
+            errors=_clean_errors(errors),
         )
         await consumer.send(outgoing_event.as_json())
     finally:
@@ -64,7 +96,7 @@ class AsyncJsonWebsocketEventConsumerMeta(type):
         # Auto add sending handler for event defined by `consumer_cls.event_type`
         for event in consumer_cls.event_type.list():
             send_handler = getattr(consumer_cls, event, None)
-            if send_handler and inspect.isfunction(send_handler):
+            if send_handler and inspect.isroutine(send_handler):
                 continue
             meta_cls._add_event_send_handler(consumer_cls, event)
 

@@ -82,15 +82,21 @@ class Event:
         :return: True if the data contains all the required keys.
         :raises InvalidData: If any of the required keys are missing.
         """
+        data = self.data or {}
+        errors = []
         for key in keys:
             if key == "":
                 continue
-            if key not in self.data:
-                raise InvalidData(
-                    {
-                        "data": [_(f"Missing key '{key}' in event data.")],
-                    }
-                )
+
+            if key not in data:
+                errors.append(_(f"Missing key '{key}' in event data."))
+
+        if errors:
+            raise InvalidData(
+                {
+                    "data": errors,
+                }
+            )
         return True
 
 
