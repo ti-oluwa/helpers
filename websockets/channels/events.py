@@ -1,10 +1,10 @@
 import typing
 import json
 from dataclasses import dataclass, KW_ONLY
-from django.core.exceptions import ValidationError
 from django.utils.translation import gettext as _
 
 from helpers.utils.choice import ExtendedEnum
+from .exceptions import InvalidData
 
 
 class BaseEventType(ExtendedEnum):
@@ -19,12 +19,6 @@ class EventType(BaseEventType):
     Ping = _("ping")
     Pong = _("pong")
     ErrorOccurred = _("error_occurred")
-
-
-class InvalidData(ValidationError):
-    """Validation error for invalid data in an event."""
-
-    pass
 
 
 @dataclass(slots=True)
@@ -88,15 +82,21 @@ class Event:
         :return: True if the data contains all the required keys.
         :raises InvalidData: If any of the required keys are missing.
         """
+        data = self.data or {}
+        errors = []
         for key in keys:
             if key == "":
                 continue
-            if key not in self.data:
-                raise InvalidData(
-                    {
-                        "data": [_(f"Missing key '{key}' in event data.")],
-                    }
-                )
+
+            if key not in data:
+                errors.append(_(f"Missing key '{key}' in event data."))
+
+        if errors:
+            raise InvalidData(
+                {
+                    "data": errors,
+                }
+            )
         return True
 
 

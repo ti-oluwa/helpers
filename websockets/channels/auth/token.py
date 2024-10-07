@@ -111,5 +111,4 @@ class TokenMiddleware(BaseMiddleware):
     async def __call__(self, scope, receive, send):
         token_string = await get_token_from_scope(type(self).keyword, scope)
         scope["user"] = await get_token_user(token_string)
-        print(scope["user"])
         return await super().__call__(scope, receive, send)
