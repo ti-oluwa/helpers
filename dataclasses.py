@@ -1328,7 +1328,7 @@ def _PhoneNumberField(
 
     from phonenumbers import PhoneNumber, parse, format_number, PhoneNumberFormat
 
-    class _PhoneNumberField(Field[PhoneNumber]):
+    class PhoneNumberField(Field[PhoneNumber]):
         """Phone number object field."""
 
         DEFAULT_OUTPUT_FORMAT = PhoneNumberFormat.E164
@@ -1360,7 +1360,7 @@ def _PhoneNumberField(
             value: PhoneNumber = getattr(instance, self.get_name())
             return format_number(value, self.output_format)
 
-    return _PhoneNumberField(output_format=output_format, **kwargs)
+    return PhoneNumberField(output_format=output_format, **kwargs)
 
 
 @depends_on({"phonenumbers": "phonenumbers"})
@@ -1372,7 +1372,7 @@ def _PhoneNumberStringField(
 
     from phonenumbers import parse, format_number, PhoneNumberFormat
 
-    class _PhoneNumberStringField(StringField):
+    class PhoneNumberStringField(StringField):
         """Phone number string field"""
 
         DEFAULT_OUTPUT_FORMAT = PhoneNumberFormat.E164
@@ -1399,7 +1399,7 @@ def _PhoneNumberStringField(
             # The cast_to_type method already does the formatting
             return self.cast_to_type(getattr(instance, self.get_name()))
 
-    return _PhoneNumberStringField(output_format=output_format, **kwargs)
+    return PhoneNumberStringField(output_format=output_format, **kwargs)
 
 
 PhoneNumberField = _PhoneNumberField
