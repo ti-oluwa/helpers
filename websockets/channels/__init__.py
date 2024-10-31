@@ -6,3 +6,8 @@ required_deps(
         "channels": "https://channels.readthedocs.io/en/stable/",
     }
 )
+
+from helpers.config import settings
+
+
+channels_settings = settings.WEBSOCKETS.CHANNELS

@@ -1,7 +1,16 @@
-from typing import Any, Callable, Optional
+from typing import Callable, Optional, TypeVar, Union, overload
+try:
+    from typing import ParamSpec
+except ImportError:
+    from typing_extensions import ParamSpec
 import time
 import sys
 from contextlib import ContextDecorator
+
+
+_P = ParamSpec("_P")
+_R = TypeVar("R")
+_C = TypeVar("_C", bound=Callable[_P, _R])
 
 
 class _timeit(ContextDecorator):
@@ -12,7 +21,7 @@ class _timeit(ContextDecorator):
         Create a new instance of the _timeit class.
 
         :param identifier: A unique identifier for the function or block.
-        :param output: The output/writer function to use. This defaults to `sys.stdout.write`.
+        :param output: The output/writer function to use. This defaults to sys.stdout.write.
         """
         self.identifier = identifier
         self.start = None
@@ -30,17 +39,34 @@ class _timeit(ContextDecorator):
         else:
             self.output(f"Execution took {time_taken} seconds.\n")
 
-    def __call__(self, func):
+    def __call__(self, func: _C) -> _C:
         self.identifier = self.identifier or func.__name__
         return super().__call__(func)
 
 
+@overload
 def timeit(
-    func: Optional[Callable[..., Any]] = None,
+    identifier: str,
+    func: Optional[_C] = None,
     *,
-    identifier: str = None,
-    output: Callable = None,
-) -> Callable[..., Any]:
+    output: Optional[Callable] = None,
+) -> Union[_timeit, _C]: ...
+
+
+@overload
+def timeit(
+    func: Optional[_C] = None,
+    *,
+    identifier: Optional[str] = None,
+    output: Optional[Callable] = None,
+) -> Union[_timeit, _C]: ...
+
+
+def timeit(
+    func: Optional[_C] = None,
+    identifier: Optional[str] = None,
+    output: Optional[Callable] = None,
+) -> Union[_timeit, _C]:
     """
     Measure the time taken to execute a function or block of code.
 
@@ -50,7 +76,7 @@ def timeit(
 
     Example:
     ```python
-    with timeit(identifier="Unique name"):
+    with timeit("Block identifier"):
         # Code block
 
     @timeit
@@ -58,6 +84,13 @@ def timeit(
         # Function code
     ```
     """
-    if func is None:
-        return _timeit(identifier, output)
-    return _timeit(identifier, output)(func)
+    if isinstance(func, str):
+        context_decorator = _timeit(identifier=func, output=output)
+        if identifier:
+            return context_decorator(identifier)
+        return context_decorator
+
+    context_decorator = _timeit(identifier=identifier, output=output)
+    if func:
+        return context_decorator(func)
+    return context_decorator

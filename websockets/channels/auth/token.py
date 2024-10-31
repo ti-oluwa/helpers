@@ -5,9 +5,10 @@ from channels.middleware import BaseMiddleware
 from channels.db import database_sync_to_async
 from django.contrib.auth.models import AnonymousUser, AbstractBaseUser
 
-from helpers.config import settings, ValueStoreProxy
+from helpers.websockets.channels import channels_settings
 
-token_settings = ValueStoreProxy(settings.WEBSOCKETS["CHANNELS"]["AUTH"]["TOKEN"])
+
+token_settings = channels_settings.AUTH.TOKEN
 """Proxy for accessing the token settings defined in the helpers settings"""
 
 
@@ -63,7 +64,7 @@ async def get_token_from_scope(keyword: str, scope: Dict) -> Optional[str]:
     query_string = scope["query_string"].decode("utf-8")
     header = await get_token_header()
     param_name = header.replace("-", "_")
-    
+
     if query_string:
         # Check query params for token
         query_params = parse_qs(query_string)
@@ -74,7 +75,6 @@ async def get_token_from_scope(keyword: str, scope: Dict) -> Optional[str]:
     # Check headers for t
     headers = scope.get("headers", [])
     return await get_token_from_headers(keyword, headers)
-
 
 
 class TokenMiddleware(BaseMiddleware):
@@ -95,9 +95,12 @@ class TokenMiddleware(BaseMiddleware):
                         "header": "WS_X_AUTH_TOKEN",
                         "model": "rest_framework.authtoken.models.Token",
                     },
+                    ...
                 },
                 "MIDDLEWARE": [
+                    ...
                     "helpers.websockets.channels.auth.token.TokenMiddleware",
+                    ...
                 ]
             }
         },
@@ -110,5 +113,7 @@ class TokenMiddleware(BaseMiddleware):
 
     async def __call__(self, scope, receive, send):
         token_string = await get_token_from_scope(type(self).keyword, scope)
-        scope["user"] = await get_token_user(token_string)
+        scope[channels_settings.AUTH.SCOPE_USER_KEY] = await get_token_user(
+            token_string
+        )
         return await super().__call__(scope, receive, send)
