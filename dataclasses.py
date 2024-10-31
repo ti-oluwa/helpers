@@ -1,9 +1,11 @@
 """
-A lightweight module for defining dataclasses with enforced types and validations.
+Module for defining simple dataclasses with enforced types and validations.
 
 Allows quick setup of structured data with fields that support type enforcement,
 custom validation, and optional constraints.
 """
+
+# * This is probably overkill or unnecessary but guess what? It's here if you ever need something like this
 
 import uuid
 import decimal
@@ -1032,13 +1034,11 @@ class SlugField(StringField):
         return validated_value
 
 
-# These next fields are implemented with dependencies on Django.
+# These next datetime fields are implemented with dependencies on Django.
 # Warning messages are displayed when the fields are initialized
 # without the required dependencies installed.
 # This is to allows for other fields in this module to be useable even
 # without the dependencies for these fields being installed.
-
-
 class DateField(Field[datetime.date]):
     """Field for handling date values."""
 
@@ -1317,8 +1317,6 @@ class FileField(IOField):
 # A DependencyWarning is displayed when the fields are initialized without the required
 # dependencies installed. This allows other fields in this module to be useable even without
 # the dependencies for these fields being installed.
-
-
 @depends_on({"phonenumbers": "phonenumbers"})
 def _PhoneNumberField(
     output_format=None,
@@ -1405,7 +1403,84 @@ def _PhoneNumberStringField(
 PhoneNumberField = _PhoneNumberField
 PhoneNumberStringField = _PhoneNumberStringField
 
+# Makes the function-based phonenumber fields unavailable for import using these names
 del _PhoneNumberField, _PhoneNumberStringField
+
+
+try:
+    # This will override the function-based fields above if the phonenumbers library is installed
+    # and the library is successfully imported. If the phonenumbers library is not installed,
+    # the fields below will not be available and the function-based fields above will be used instead.
+    # and a proper warning/error will be displayed when the fields are initialized without the required
+    # dependencies installed.
+    # This also tricks the typing system into thinking the phonenumber fields are classes even when
+    # it's the function-based versions that are available, thereby improving typing for the field.
+
+    # This approach is verbose but this is the best balance I could find as regards proper typing for
+    # the field, and field dependency management
+    from phonenumbers import PhoneNumber, parse, format_number, PhoneNumberFormat
+
+    class PhoneNumberField(Field[PhoneNumber]):
+        """Phone number object field."""
+
+        DEFAULT_OUTPUT_FORMAT = PhoneNumberFormat.E164
+
+        def __init__(
+            self,
+            output_format: typing.Optional[PhoneNumberFormat] = None,
+            **kwargs: Unpack[FieldInitKwargs],
+        ):
+            """
+            Initialize the field.
+
+            :param output_format: The preferred output format for the phone number value.
+            :param kwargs: Additional keyword arguments for the field.
+            """
+            super().__init__(_type=(str, PhoneNumber), **kwargs)
+            self.output_format = output_format or type(self).DEFAULT_OUTPUT_FORMAT
+
+        def cast_to_type(self, value: typing.Any):
+            if isinstance(value, PhoneNumber):
+                return value
+
+            try:
+                return parse(value)
+            except Exception as exc:
+                raise FieldError("Invalid phone number") from exc
+
+        def to_json(self, instance: "_Field"):
+            value: PhoneNumber = getattr(instance, self.get_name())
+            return format_number(value, self.output_format)
+
+    class PhoneNumberStringField(StringField):
+        """Phone number string field"""
+
+        DEFAULT_OUTPUT_FORMAT = PhoneNumberFormat.E164
+
+        def __init__(
+            self,
+            output_format: typing.Optional[PhoneNumberFormat] = None,
+            **kwargs: Unpack[FieldInitKwargs],
+        ):
+            """
+            Initialize the field.
+
+            :param output_format: The preferred output format for the phone number value.
+            :param kwargs: Additional keyword arguments for the field.
+            """
+            kwargs.setdefault("max_length", 20)
+            super().__init__(**kwargs)
+            self.output_format = output_format or type(self).DEFAULT_OUTPUT_FORMAT
+
+        def cast_to_type(self, value: typing.Any):
+            return format_number(parse(value), self.output_format)
+
+        def to_json(self, instance: "_Field"):
+            # The cast_to_type method already does the formatting
+            return self.cast_to_type(getattr(instance, self.get_name()))
+
+except ImportError:
+    pass
 
 #####################
 # SIMPLE DATA CLASS #
