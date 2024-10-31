@@ -264,3 +264,45 @@ def activate_timezone(tz: typing.Union[str, zoneinfo.ZoneInfo]):
         yield
     finally:
         django_timezone.deactivate()
+
+
+# From display_timedelta Python package https://pypi.org/project/display-timedelta/
+def display_timedelta(delta: datetime.timedelta):
+    """Display a timedelta in a human-readable format."""
+    if delta < datetime.timedelta(0):
+        raise ValueError("cannot display negative time delta {}".format(delta))
+
+    def plural(number):
+        """Return 's' if number is not 1."""
+        if number == 1:
+            return ""
+        return "s"
+
+    result = []
+    seconds = int(delta.total_seconds())
+    days, seconds = seconds // (3600 * 24), seconds % (3600 * 24)
+
+    if days > 0:
+        result.append("{} day{}".format(days, plural(days)))
+    hours, seconds = seconds // 3600, seconds % 3600
+
+    if hours > 0:
+        result.append("{} hour{}".format(hours, plural(hours)))
+    minutes, seconds = seconds // 60, seconds % 60
+
+    if minutes > 0:
+        result.append("{} minute{}".format(minutes, plural(minutes)))
+
+    if seconds > 0:
+        result.append("{} second{}".format(seconds, plural(seconds)))
+
+    if len(result) >= 3:
+        return ", ".join(result[:-1]) + ", and " + result[-1]
+
+    if len(result) == 2:
+        return " and ".join(result)
+
+    if len(result) == 1:
+        return result[0]
+
+    return "right now"

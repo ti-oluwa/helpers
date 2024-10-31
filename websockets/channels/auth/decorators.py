@@ -2,14 +2,16 @@ import typing
 import functools
 import asyncio
 import inspect
-from channels.generic.websocket import AsyncConsumer
+from channels.generic.websocket import AsyncConsumer, SyncConsumer
 from django.core.exceptions import ImproperlyConfigured
 
+from ..utils import get_user_from_scope
+from helpers.websockets.channels import channels_settings
 
 AUTH_REQUIRED_CODE = 4003  # Permission denied error code
 AUTH_REQUIRED_MSG = "Authentication required!"
 
-Consumer = typing.TypeVar("Consumer", bound=AsyncConsumer)
+Consumer = typing.TypeVar("Consumer", AsyncConsumer, SyncConsumer)
 
 
 def authentication_required(
@@ -17,6 +19,7 @@ def authentication_required(
     *,
     code: int = AUTH_REQUIRED_CODE,
     message: str = AUTH_REQUIRED_MSG,
+    scope_user_key: str = channels_settings.AUTH.SCOPE_USER_KEY,
 ) -> typing.Union[typing.Callable[[Consumer], Consumer], typing.Type[Consumer]]:
     """
     Websocket consumer decorator.
@@ -26,6 +29,9 @@ def authentication_required(
     :param consumer_cls: The consumer class to decorate
     :param code: The close code to send if the user is not authenticated
     :param message: The close message to send if the user is not authenticated
+    :param scope_user_key: The key to be used to fetch the user object from the
+        consumer's connection scope. The default key defined in the settings
+        is used, if not provided.
     """
     if consumer_cls is None:
         # If the decorator is called with arguments
@@ -47,7 +53,7 @@ def authentication_required(
             async def wrapper(*args, **kwargs):
                 # Get the websocket object from the first argument
                 consumer: Consumer = args[0]
-                user = consumer.scope.get("user")
+                user = get_user_from_scope(consumer.scope, user_key=scope_user_key)
                 # Check if the user is authenticated
                 if not user or not user.is_authenticated:
                     return await consumer.close(code=code, reason=message)
@@ -58,7 +64,7 @@ def authentication_required(
             def wrapper(*args, **kwargs):
                 # Get the websocket object from the first argument
                 consumer: Consumer = args[0]
-                user = consumer.scope.get("user")
+                user = get_user_from_scope(consumer.scope, user_key=scope_user_key)
                 # Check if the user is authenticated
                 if not user or not user.is_authenticated:
                     return consumer.close(code=code, reason=message)

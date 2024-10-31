@@ -1,8 +1,23 @@
 from inspect import isclass
 import collections.abc
 from io import BytesIO
-from typing import Union, Callable, Any, TypeVar, Dict, Type
+from typing import (
+    Iterator,
+    Union,
+    Callable,
+    Any,
+    TypeVar,
+    Dict,
+    Type,
+    List,
+    Iterable,
+    AsyncIterator,
+    AsyncIterable,
+    Optional,
+    Tuple,
+)
 import base64
+from itertools import islice
 
 from .choice import ExtendedEnum
 
@@ -12,29 +27,46 @@ def has_method(obj: Any, method_name: str) -> bool:
     return callable(getattr(obj, method_name, None))
 
 
-def type_implements_iter(tp: Type[Any]) -> bool:
+def type_implements_iter(tp: Type[Any], /) -> bool:
     """Check if the type has an __iter__ method (like lists, sets, etc.)."""
     return has_method(tp, "__iter__")
 
 
-def is_mapping_type(tp: Type[Any]) -> bool:
+def is_mapping_type(tp: Type[Any], /) -> bool:
     """Check if a given type is a mapping (like dict)."""
     return isinstance(tp, type) and issubclass(tp, collections.abc.Mapping)
 
 
-def is_iterable_type(tp: Type[Any]) -> bool:
-    """Check if a given type is an iterable (like list, set, tuple), but not a string."""
-    # Exclude str from being considered an iterable for this use case
-    return (
-        isinstance(tp, type)
-        and issubclass(tp, collections.abc.Iterable)
-        and not issubclass(tp, (str, bytes))
-    )
+def is_iterable_type(
+    tp: Type[Any], /, *, exclude: Optional[Tuple[Type[Any]]] = None
+) -> bool:
+    """
+    Check if a given type is an iterable.
+
+    :param tp: The type to check.
+    :param exclude: A tuple of types to return False for, even if they are iterable types.
+    """
+    is_iter_type = isinstance(tp, type) and issubclass(tp, collections.abc.Iterable)
+    if not is_iter_type:
+        return False
+
+    if exclude:
+        for _tp in exclude:
+            if not is_iterable_type(_tp):
+                raise ValueError(f"{_tp} is not an iterable type.")
+
+        is_iter_type = is_iter_type and not issubclass(tp, tuple(exclude))
+    return is_iter_type
+
+
+def is_iterable(obj: Any) -> bool:
+    """Check if an object is an iterable."""
+    return isinstance(obj, collections.abc.Iterable)
 
 
 def is_generic_type(tp: Type[Any]) -> bool:
     """Check if a type is a generic type like List[str], Dict[str, int], etc."""
-    return hasattr(tp, "__origin__") or tp is Any
+    return hasattr(tp, "__origin__")
 
 
 def is_exception_class(exc):
@@ -260,7 +292,48 @@ def python_type_to_html_input_type(py_type: type) -> str:
     return "text"
 
 
+T = TypeVar("T")
+
+
+def batched(i: Union[Iterator[T], Iterable[T]], batch_size: int):
+    """
+    Create batches of size n from the given iterable.
+
+    :param iterable: The iterable to split into batches.
+    :param batch_size: The batch size.
+    :yield: Batches of the iterable as lists.
+    """
+    iterator = iter(i)
+    while batch := list(islice(iterator, batch_size)):
+        yield batch
+
+
+async def async_batched(
+    async_iter: Union[AsyncIterable[T], AsyncIterator[T]], batch_size: int
+) -> AsyncIterator[List[T]]:
+    """
+    Create batches of size batch_size from the given async iterable.
+
+    :param async_iter: The async iterable to split into batches.
+    :param batch_size: The batch size.
+    :yield: Batches of the async iterable as lists.
+    """
+    batch = []
+    async for item in async_iter:
+        batch.append(item)
+        if len(batch) == batch_size:
+            yield batch
+            batch = []
+
+    if batch:
+        yield batch
+
+
 __all__ = [
+    "is_iterable_type",
+    "is_iterable",
+    "is_generic_type",
+    "is_mapping_type",
     "is_exception_class",
     "str_to_base64",
     "bytes_to_base64",
@@ -274,4 +347,6 @@ __all__ = [
     "get_dict_diff",
     "underscore_dict_keys",
     "python_type_to_html_input_type",
+    "batched",
+    "async_batched",
 ]

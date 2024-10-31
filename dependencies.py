@@ -1,6 +1,15 @@
 import importlib
 import typing
 import functools
+import warnings
+
+try:
+    from typing_extensions import ParamSpec
+except ImportError:
+    from typing import ParamSpec
+
+_P = ParamSpec("_P")
+_R = typing.TypeVar("_R")
 
 
 class DependencyRequired(Exception):
@@ -38,19 +47,38 @@ def required_deps(dependencies: typing.Dict[str, str]):
         raise DependencyRequired(missing)
 
 
-def depends_on(dependencies: typing.Dict[str, str]):
+def deps_warning(dependencies: typing.Dict[str, str]):
     """
-    Function decorator.
-    
-    Checks if the dependencies or packages required by a module are installed on calling the function.
-    
+    Helper function to check and raise a warning if the dependencies or packages required by a module are not installed.
+
     :param dependencies: A dictionary of required dependencies where the key is the package name,
     and the value is the package URL or package name.
     """
-    def decorator(func):
+    try:
+        required_deps(dependencies)
+    except DependencyRequired as exc:
+        warnings.warn(str(exc), UserWarning, stacklevel=2)
+    return
+
+
+def depends_on(dependencies: typing.Dict[str, str], warning: bool = False):
+    """
+    Function decorator.
+
+    Checks if the dependencies or packages required by a module are installed on execting the function.
+
+    :param dependencies: A dictionary of required dependencies where the key is the package name,
+    and the value is the package URL or package name.
+    :param warning: If True, a warning is raised instead of an exception.
+    """
+
+    def decorator(func: typing.Callable[_P, _R]) -> typing.Callable[_P, _R]:
         @functools.wraps(func)
-        def wrapper(*args, **kwargs):
-            required_deps(dependencies)
+        def wrapper(*args: _P.args, **kwargs: _P.kwargs) -> _R:
+            if warning:
+                deps_warning(dependencies)
+            else:
+                required_deps(dependencies)
             return func(*args, **kwargs)
 
         return wrapper

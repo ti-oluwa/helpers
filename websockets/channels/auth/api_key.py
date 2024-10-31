@@ -4,11 +4,11 @@ from django.utils.module_loading import import_string
 from channels.middleware import BaseMiddleware
 from channels.db import database_sync_to_async
 
-from helpers.config import settings, ValueStoreProxy
+from helpers.websockets.channels import channels_settings
 from ..utils import async_reject_connection
 
 
-apikey_settings = ValueStoreProxy(settings.WEBSOCKETS["CHANNELS"]["AUTH"]["API_KEY"])
+apikey_settings = channels_settings.AUTH.API_KEY
 """Proxy for accessing the API key settings defined in the helpers settings"""
 
 

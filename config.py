@@ -1,11 +1,8 @@
 import functools
-from typing import Any, Dict
+from typing import Any, Dict, Union
 from django.conf import settings as django_settings
 
 from .utils.misc import merge_dicts
-
-
-__all__ = ["settings", "make_proxy", "ValueStoreProxy"]
 
 
 def _make_proxy_getter(module, settings: Any):
@@ -41,6 +38,7 @@ DEFAULT_SETTINGS = {
                     "header": "WS_X_AUTH_TOKEN",
                     "model": "rest_framework.authtoken.models.Token",
                 },
+                "SCOPE_USER_KEY": "user",
             },
             "MIDDLEWARE": [
                 "channels.security.websocket.AllowedHostsOriginValidator",
@@ -61,36 +59,62 @@ class ValueStoreProxy:
     Proxy for accessing the values in a value store or dictionary as attributes
     """
 
-    def __init__(self, valuestore: Dict[str, Any]) -> None:
-        self.valuestore = valuestore
+    def __init__(self, valuestore: Dict[str, Any], *, recursive: bool = False) -> None:
+        if recursive:
+            self.valuestore = self.nested_valuestores_to_proxies(valuestore)
+        else:
+            self.valuestore = valuestore
 
-    def __getattr__(self, name: str) -> Any:
+    @staticmethod
+    def nested_valuestores_to_proxies(
+        valuestore: Dict[str, Any],
+    ) -> Dict[str, Union["ValueStoreProxy", Any]]:
+        new_valuestore = {}
+        for key, value in valuestore.items():
+            if not isinstance(value, dict):
+                new_valuestore[key] = value
+            else:
+                new_valuestore[key] = ValueStoreProxy(value, recursive=True)
+        return new_valuestore
+
+    def __getattr__(self, name: str) -> Union["ValueStoreProxy", Any]:
         try:
             return self.valuestore[name]
         except KeyError as exc:
-            raise AttributeError(exc)
+            raise AttributeError(exc) from exc
+
+    def __getitem__(self, name: str) -> Union["ValueStoreProxy", Any]:
+        return getattr(self, name)
+
+    def __repr__(self):
+        return f"{type(self).__name__}({repr(self.valuestore)})"
+    
+    def get(self, name: str, default: Any = None) -> Any:
+        try:
+            return getattr(self, name)
+        except AttributeError:
+            return default
 
 
-class _Settings(ValueStoreProxy): # type: ignore
-    """Settings proxy"""
+class _Settings(ValueStoreProxy):
+    """Settings loader"""
 
     __instance = None
 
-    def __init__(self, setting_name: str) -> None:
-        if type(self).__instance:
+    def __new__(cls, *args, **kwargs):
+        instance = super().__new__(cls)
+        if cls.__instance:
             raise ValueError("Settings already loaded")
 
-        type(self).__instance = self
+        cls.__instance = instance
+        return instance
+
+    def __init__(self, setting_name: str) -> None:
         settings: Dict[str, Any] = merge_dicts(
             DEFAULT_SETTINGS, getattr(django_settings, setting_name, {})
         )
-        return super().__init__(settings)
-    
-    def __new__(cls, *args, **kwargs):
-        if not cls.__instance:
-            return super().__new__(cls)
-        return cls.__instance
+        return super().__init__(settings, recursive=True)
 
 
 settings = _Settings("HELPERS_SETTINGS")
-"""`helpers` settings"""
+"""`helpers` module's settings"""

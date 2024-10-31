@@ -123,7 +123,7 @@ def structure_to_generic_type(
         else:
             return origin(_map)
 
-    if is_iterable_type(origin) and len(args) == 1:
+    if is_iterable_type(origin, exclude=(str, bytes)) and len(args) == 1:
         _iter = [
             converter.structure(v, args[0])
             if not is_generic_type(args[0])
@@ -279,7 +279,7 @@ def unstructure_as_generic_type(
         else:
             return origin(_map)
 
-    if is_iterable_type(origin) and len(args) == 1:
+    if is_iterable_type(origin, exclude=(str, bytes)) and len(args) == 1:
         # Handle Iterable[T] (like List[T], Set[T], etc.)
         _iter = [
             converter.unstructure(v, unstructure_as=args[0])
