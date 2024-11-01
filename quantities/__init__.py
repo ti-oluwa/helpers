@@ -1,4 +1,4 @@
 
-from helpers.dependencies import required_deps
+from helpers.dependencies import deps_required
 
-required_deps({"quantities": "quantities"})
+deps_required({"quantities": "quantities"})

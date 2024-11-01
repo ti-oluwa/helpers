@@ -1,6 +1,6 @@
-from helpers.dependencies import required_deps
+from helpers.dependencies import deps_required
 
-required_deps({"asgiref": "asgiref"})
+deps_required({"asgiref": "asgiref"})
 
 from asgiref.sync import SyncToAsync
 from django.db import close_old_connections

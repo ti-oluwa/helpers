@@ -1,6 +1,6 @@
-from helpers.dependencies import required_deps, depends_on
+from helpers.dependencies import deps_required, depends_on
 
-required_deps({"django": "https://www.djangoproject.com/"})
+deps_required({"django": "https://www.djangoproject.com/"})
 
 from typing import Optional
 import io

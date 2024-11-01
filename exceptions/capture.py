@@ -8,9 +8,9 @@ Use the `capture.enable` decorator to enable for specifc views only, especially,
 
 from __future__ import annotations
 
-from helpers.dependencies import required_deps
+from helpers.dependencies import deps_required
 
-required_deps(
+deps_required(
     {
         "django": "https://www.djangoproject.com/",
         "typing_extensions": "typing-extensions",

@@ -1,6 +1,6 @@
-from helpers.dependencies import required_deps
+from helpers.dependencies import deps_required
 
-required_deps({"geopy": "geopy"})
+deps_required({"geopy": "geopy"})
 
 try:
     from geopy.distance import geodesic, great_circle

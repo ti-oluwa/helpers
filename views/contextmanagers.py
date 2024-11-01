@@ -1,6 +1,6 @@
-from helpers.dependencies import required_deps
+from helpers.dependencies import deps_required
 
-required_deps({"asgiref": "asgiref"})
+deps_required({"asgiref": "asgiref"})
 
 from typing import Any, Union
 import functools

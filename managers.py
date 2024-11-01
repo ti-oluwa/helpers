@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from .dependencies import required_deps
+from .dependencies import deps_required
 
-required_deps({"django": "https://www.djangoproject.com/"})
+deps_required({"django": "https://www.djangoproject.com/"})
 
 import functools
 import inspect
