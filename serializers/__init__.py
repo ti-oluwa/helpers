@@ -1,6 +1,6 @@
-from helpers.dependencies import required_deps
+from helpers.dependencies import deps_required
 
-required_deps(
+deps_required(
     {
         "django": "https://www.djangoproject.com/",
         "rest_framework": "https://www.django-rest-framework.org/",

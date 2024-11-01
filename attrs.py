@@ -1,6 +1,6 @@
-from .dependencies import required_deps
+from .dependencies import deps_required
 
-required_deps({
+deps_required({
     "attrs": "https://www.attrs.org/en/stable/",
     "cattrs": "https://pypi.org/project/cattrs/",
 })

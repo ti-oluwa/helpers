@@ -1,6 +1,6 @@
-from helpers.dependencies import required_deps
+from helpers.dependencies import deps_required
 
-required_deps({"django": "https://www.djangoproject.com/"})
+deps_required({"django": "https://www.djangoproject.com/"})
 
 import typing
 import datetime

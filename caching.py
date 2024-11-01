@@ -1,6 +1,6 @@
-from .dependencies import required_deps
+from .dependencies import deps_required
 
-required_deps({"cachetools": "cachetools"})
+deps_required({"cachetools": "cachetools"})
 
 import functools
 from typing import Callable, TypeVar, Coroutine, Any

@@ -15,20 +15,23 @@ _R = typing.TypeVar("_R")
 class DependencyRequired(Exception):
     """Raised when a required dependency is missing."""
 
-    def __init__(self, missing_dependencies):
+    def __init__(self, *missing_dependencies: typing.Tuple[str, str]):
         message = "The following dependencies are required but missing:\n"
         for name, url_or_package in missing_dependencies:
-            if url_or_package.startswith("http"):
-                message += f"{name}: Visit {url_or_package} for installation.\n"
+            if not url_or_package:
+                message += f"{name}: Install the package"
             else:
-                message += (
-                    f"{name}: Install by running `pip install {url_or_package}`.\n"
-                )
+                if url_or_package.startswith("http"):
+                    message += f"{name}: Visit {url_or_package} for installation.\n"
+                else:
+                    message += (
+                        f"{name}: Install by running `pip install {url_or_package}`.\n"
+                    )
         super().__init__(message)
         self.missing_dependencies = missing_dependencies
 
 
-def required_deps(dependencies: typing.Dict[str, str]):
+def deps_required(dependencies: typing.Dict[str, str]):
     """
     Helper function to check if the dependencies or packages required by a module are installed.
 
@@ -44,7 +47,7 @@ def required_deps(dependencies: typing.Dict[str, str]):
             missing.append((name, url_or_package))
 
     if missing:
-        raise DependencyRequired(missing)
+        raise DependencyRequired(*missing)
 
 
 def deps_warning(dependencies: typing.Dict[str, str]):
@@ -55,7 +58,7 @@ def deps_warning(dependencies: typing.Dict[str, str]):
     and the value is the package URL or package name.
     """
     try:
-        required_deps(dependencies)
+        deps_required(dependencies)
     except DependencyRequired as exc:
         warnings.warn(str(exc), UserWarning, stacklevel=2)
     return
@@ -78,7 +81,7 @@ def depends_on(dependencies: typing.Dict[str, str], warning: bool = False):
             if warning:
                 deps_warning(dependencies)
             else:
-                required_deps(dependencies)
+                deps_required(dependencies)
             return func(*args, **kwargs)
 
         return wrapper

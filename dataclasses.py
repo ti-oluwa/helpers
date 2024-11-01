@@ -23,7 +23,7 @@ from urllib3.util import Url, parse_url
 from types import MappingProxyType
 
 from .utils.misc import is_generic_type, is_iterable_type, is_iterable
-from .dependencies import depends_on
+from .dependencies import depends_on, deps_required
 
 try:
     from typing_extensions import Unpack
@@ -1044,34 +1044,50 @@ class DateField(Field[datetime.date]):
 
     DEFAULT_OUTPUT_FORMAT: str = "%Y-%m-%d"
 
-    @depends_on({"django": "https://www.djangoproject.com/"}, warning=True)
     def __init__(
         self,
+        input_format: typing.Optional[str] = None,
         output_format: typing.Optional[str] = None,
         **kwargs: Unpack[FieldInitKwargs],
     ):
         """
         Initialize the field.
 
-        :param output_format: The output format for the date value.
+        :param input_format: The expected input format for the date value.
+            If not provided, the field will attempt to parse the date value
+            itself.
+        :param output_format: The preferred output format for the date value.
         :param kwargs: Additional keyword arguments for the field.
         """
         super().__init__(_type=(str, datetime.date), **kwargs)
+        self.input_format = input_format
         self.output_format = output_format or type(self).DEFAULT_OUTPUT_FORMAT
 
-    def cast_to_type(self, value: typing.Any) -> datetime.date:
+    def parse_date(self, value: str) -> datetime.date:
+        """
+        Parse the date string into a date object.
+
+        Override this method to implement custom date parsing logic.
+        """
+        if self.input_format:
+            return datetime.datetime.strptime(value, self.input_format).date()
+
+        deps_required({"django": "https://www.djangoproject.com/"})
         from django.utils.dateparse import parse_date
 
+        parsed_date = parse_date(value)
+        if parsed_date is None:
+            raise ValueError("Invalid date value")
+        return parsed_date
+
+    def cast_to_type(self, value: typing.Any) -> datetime.date:
         if isinstance(value, datetime.date):
             return value
 
         if not isinstance(value, str):
             raise ValueError("Invalid date value")
 
-        parsed_date = parse_date(value)
-        if parsed_date is None:
-            raise ValueError("Invalid date value")
-        return parsed_date
+        return self.parse_date(value)
 
     def to_json(self, instance: "_Field") -> str:
         value: datetime.date = getattr(instance, self.get_name())
@@ -1083,34 +1099,50 @@ class TimeField(Field[datetime.time]):
 
     DEFAULT_OUTPUT_FORMAT: str = "%H:%M:%S.%s"
 
-    @depends_on({"django": "https://www.djangoproject.com/"}, warning=True)
     def __init__(
         self,
+        input_format: typing.Optional[str] = None,
         output_format: typing.Optional[str] = None,
         **kwargs: Unpack[FieldInitKwargs],
     ):
         """
         Initialize the field.
 
-        :param output_format: The output format for the time value.
+        :param input_format: The expected input format for the time value.
+            If not provided, the field will attempt to parse the time value
+            itself.
+        :param output_format: The preferred output format for the time value.
         :param kwargs: Additional keyword arguments for the field.
         """
         super().__init__(_type=(str, datetime.time), **kwargs)
+        self.input_format = input_format
         self.output_format = output_format or type(self).DEFAULT_OUTPUT_FORMAT
 
-    def cast_to_type(self, value: typing.Any) -> datetime.time:
+    def parse_time(self, value: str) -> datetime.time:
+        """
+        Parse the time string into a time object.
+
+        Override this method to implement custom time parsing logic.
+        """
+        if self.input_format:
+            return datetime.datetime.strptime(value, self.input_format).time()
+
+        deps_required({"django": "https://www.djangoproject.com/"})
         from django.utils.dateparse import parse_time
 
+        parsed_time = parse_time(value)
+        if parsed_time is None:
+            raise ValueError("Invalid time value")
+        return parsed_time
+
+    def cast_to_type(self, value: typing.Any) -> datetime.time:
         if isinstance(value, datetime.time):
             return value
 
         if not isinstance(value, str):
             raise ValueError("Invalid time value")
 
-        parsed_time = parse_time(value)
-        if parsed_time is None:
-            raise ValueError("Invalid time value")
-        return parsed_time
+        return self.parse_time(value)
 
     def to_json(self, instance: "_Field") -> str:
         value: datetime.time = getattr(instance, self.get_name())
@@ -1120,23 +1152,31 @@ class TimeField(Field[datetime.time]):
 class DurationField(Field[datetime.timedelta]):
     """Field for handling duration values."""
 
-    @depends_on({"django": "https://www.djangoproject.com/"}, warning=True)
     def __init__(self, **kwargs: Unpack[FieldInitKwargs]):
         super().__init__(_type=(str, datetime.timedelta), **kwargs)
 
-    def cast_to_type(self, value: typing.Any) -> datetime.timedelta:
+    @depends_on({"django": "https://www.djangoproject.com/"})
+    def parse_duration(self, value: str) -> datetime.timedelta:
+        """
+        Parse the duration string into a timedelta object.
+
+        Override this method to implement custom duration parsing logic.
+        """
         from django.utils.dateparse import parse_duration
 
+        parsed_duration = parse_duration(value)
+        if parsed_duration is None:
+            raise ValueError("Invalid duration value")
+        return parsed_duration
+
+    def cast_to_type(self, value: typing.Any) -> datetime.timedelta:
         if isinstance(value, datetime.timedelta):
             return value
 
         if not isinstance(value, str):
             raise ValueError("Invalid duration value")
 
-        parsed_duration = parse_duration(value)
-        if parsed_duration is None:
-            raise ValueError("Invalid duration value")
-        return parsed_duration
+        return self.parse_duration(value)
 
     def to_json(self, instance: "_Field") -> str:
         value: datetime.timedelta = getattr(instance, self.get_name())
@@ -1151,9 +1191,9 @@ class DateTimeField(Field[datetime.datetime]):
 
     DEFAULT_OUTPUT_FORMAT = "%Y-%m-%d %H:%M:%S%z"
 
-    @depends_on({"django": "https://www.djangoproject.com/"}, warning=True)
     def __init__(
         self,
+        input_format: typing.Optional[str] = None,
         output_format: typing.Optional[str] = None,
         tz: typing.Optional[datetime.tzinfo] = None,
         **kwargs: Unpack[FieldInitKwargs],
@@ -1161,27 +1201,43 @@ class DateTimeField(Field[datetime.datetime]):
         """
         Initialize the field.
 
-        :param output_format: The output format for the datetime value.
+        :param input_format: The expected input format for the datetime value.
+            If not provided, the field will attempt to parse the datetime value
+            itself.
+        :param output_format: The preferred output format for the datetime value.
         :param tz: The timezone to use for the datetime value. If this set,
             the datetime value will be represented in this timezone.
         :param kwargs: Additional keyword arguments for the field.
         """
         super().__init__(_type=(str, datetime.datetime), **kwargs)
+        self.input_format = input_format
         self.output_format = output_format or type(self).DEFAULT_OUTPUT_FORMAT
         self.tz = tz
 
-    def cast_to_type(self, value: typing.Any) -> datetime.datetime:
+    def parse_datetime(self, value: str) -> datetime.datetime:
+        """
+        Parse the datetime string into a datetime object.
+
+        Override this method to implement custom datetime parsing logic.
+        """
+        if self.input_format:
+            return datetime.datetime.strptime(value, self.input_format)
+
+        deps_required({"django": "https://www.djangoproject.com/"})
         from django.utils.dateparse import parse_datetime
 
+        parsed_datetime = parse_datetime(value)
+        if parsed_datetime is None:
+            raise ValueError("Invalid datetime value")
+        return parsed_datetime
+
+    def cast_to_type(self, value: typing.Any) -> datetime.datetime:
         if isinstance(value, datetime.datetime):
             parsed_datetime = value
         else:
             if not isinstance(value, str):
                 raise FieldError("Invalid datetime value")
-
-            parsed_datetime = parse_datetime(value)
-            if parsed_datetime is None:
-                raise FieldError("Invalid datetime value")
+            parsed_datetime = self.parse_datetime(value)
 
         if self.tz:
             if parsed_datetime.tzinfo:
@@ -1312,109 +1368,35 @@ class FileField(IOField):
         super().__delete__(instance)
 
 
-# These phone number fields are implemented with dependencies on the phonenumbers library.
-# Hence, the fields are only available when the phonenumbers library is installed.
-# A DependencyWarning is displayed when the fields are initialized without the required
+# These phone number fields are implemented with dependencies on the `phonenumbers` library.
+# Hence, the fields are only available when the `phonenumbers` library is installed.
+# Here we use a ghost field approach to make the fields available even when the dependencies.
+# Although, a DependencyRequired is raised when the fields are initialized without the required
 # dependencies installed. This allows other fields in this module to be useable even without
 # the dependencies for these fields being installed.
 @depends_on({"phonenumbers": "phonenumbers"})
-def _PhoneNumberField(
-    output_format=None,
-    **kwargs: Unpack[FieldInitKwargs],
-):
-    """Field for handling phone numbers as `phonenumbers.PhoneNumber` objects."""
-
-    from phonenumbers import PhoneNumber, parse, format_number, PhoneNumberFormat
-
-    class PhoneNumberField(Field[PhoneNumber]):
-        """Phone number object field."""
-
-        DEFAULT_OUTPUT_FORMAT = PhoneNumberFormat.E164
-
-        def __init__(
-            self,
-            output_format: typing.Optional[PhoneNumberFormat] = None,
-            **kwargs: Unpack[FieldInitKwargs],
-        ):
-            """
-            Initialize the field.
-
-            :param output_format: The preferred output format for the phone number value.
-            :param kwargs: Additional keyword arguments for the field.
-            """
-            super().__init__(_type=(str, PhoneNumber), **kwargs)
-            self.output_format = output_format or type(self).DEFAULT_OUTPUT_FORMAT
-
-        def cast_to_type(self, value: typing.Any):
-            if isinstance(value, PhoneNumber):
-                return value
-
-            try:
-                return parse(value)
-            except Exception as exc:
-                raise FieldError("Invalid phone number") from exc
-
-        def to_json(self, instance: "_Field"):
-            value: PhoneNumber = getattr(instance, self.get_name())
-            return format_number(value, self.output_format)
-
-    return PhoneNumberField(output_format=output_format, **kwargs)
+def _PhoneNumberField(**kwargs): ...
 
 
 @depends_on({"phonenumbers": "phonenumbers"})
-def _PhoneNumberStringField(
-    output_format=None,
-    **kwargs: Unpack[FieldInitKwargs],
-):
-    """Field for handling phone number as strings."""
-
-    from phonenumbers import parse, format_number, PhoneNumberFormat
-
-    class PhoneNumberStringField(StringField):
-        """Phone number string field"""
-
-        DEFAULT_OUTPUT_FORMAT = PhoneNumberFormat.E164
-
-        def __init__(
-            self,
-            output_format: typing.Optional[PhoneNumberFormat] = None,
-            **kwargs: Unpack[FieldInitKwargs],
-        ):
-            """
-            Initialize the field.
-
-            :param output_format: The preferred output format for the phone number value.
-            :param kwargs: Additional keyword arguments for the field.
-            """
-            kwargs.setdefault("max_length", 20)
-            super().__init__(**kwargs)
-            self.output_format = output_format or type(self).DEFAULT_OUTPUT_FORMAT
-
-        def cast_to_type(self, value: typing.Any):
-            return format_number(parse(value), self.output_format)
-
-        def to_json(self, instance: "_Field"):
-            # The cast_to_type method already does the formatting
-            return self.cast_to_type(getattr(instance, self.get_name()))
-
-    return PhoneNumberStringField(output_format=output_format, **kwargs)
+def _PhoneNumberStringField(**kwargs): ...
 
 
 PhoneNumberField = _PhoneNumberField
 PhoneNumberStringField = _PhoneNumberStringField
 
-# Makes the function-based phonenumber fields unavailable for import using these names
+# Makes sure the ghost phonenumber fields are unavailable for import using these names
 del _PhoneNumberField, _PhoneNumberStringField
 
 
 try:
-    # This will override the function-based fields above if the phonenumbers library is installed
-    # and the library is successfully imported. If the phonenumbers library is not installed,
-    # the fields below will not be available and the function-based fields above will be used instead.
+    # This will override the ghost fields above if the `phonenumbers` library is installed
+    # and the library is successfully imported. If the `phonenumbers` library is not installed,
+    # the fields below will not be available and the ghost phonenumber fields above will be used instead.
     # and a proper warning/error will be displayed when the fields are initialized without the required
     # dependencies installed.
     # This also tricks the typing system into thinking the phonenumber fields are classes even when
-    # it's the function-based versions that are available, thereby improving typing for the field.
+    # the ghost phonenumber fields are function-based versions, thereby improving typing for the field.
 
     # This approach is verbose but this is the best balance I could find as regards proper typing for
     # the field, and field dependency management
