@@ -1,9 +1,5 @@
-"""Module containing utility useful for fetching and cleaning data needed by apps"""
+"""Utilities for cleaning, parsing and loading data"""
 
 from .exceptions import DataError
-from .cleaners import ModelDataCleaner
 
-__all__ = [
-    "DataError",
-    "ModelDataCleaner",
-]
+__all__ = ["DataError"]

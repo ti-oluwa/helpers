@@ -1,6 +1,10 @@
 from helpers.dependencies import deps_required
 
-deps_required({"asgiref": "asgiref"})
+deps_required(
+    {
+        "django": "https://www.djangoproject.com/",
+    }
+)
 
 from typing import Any, Callable, Dict, Iterable, List, Literal, TypeVar, Generic
 from django.db import models

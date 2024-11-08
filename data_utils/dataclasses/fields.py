@@ -1,17 +1,9 @@
-"""
-Module for defining simple dataclasses with enforced types and validations.
-
-Allows quick setup of structured data with fields that support type enforcement,
-custom validation, and optional constraints.
-"""
-
-# * This is probably overkill or unnecessary but guess what? It's here if you ever need something like this
+"""Data fields for enforcing type validation and constraints."""
 
 import uuid
 import decimal
 import datetime
 import functools
-import inspect
 import typing
 import re
 import json
@@ -20,10 +12,11 @@ import io
 import copy
 import ipaddress
 from urllib3.util import Url, parse_url
-from types import MappingProxyType
 
-from .utils.misc import is_generic_type, is_iterable_type, is_iterable
-from .dependencies import depends_on, deps_required
+from helpers.utils.misc import is_generic_type, is_iterable_type, is_iterable
+from helpers.dependencies import depends_on, deps_required
+from ..exceptions import DataError
+from ..parsers import parse_duration
 
 try:
     from typing_extensions import Unpack
@@ -35,10 +28,8 @@ try:
 except ImportError:
     from typing import ParamSpec
 
-try:
-    from typing_extensions import Self
-except ImportError:
-    from typing import Self
+from helpers.utils.time import timeit
+from helpers.utils.misc import merge_dicts
 
 
 class empty:
@@ -47,7 +38,7 @@ class empty:
     pass
 
 
-class Undefined:
+class undefined:
     """Class to represent an undefined type."""
 
     pass
@@ -61,13 +52,7 @@ FieldValidator: typing.TypeAlias = typing.Callable[[_V, typing.Optional[_R]], _V
 DefaultFactory = typing.Callable[[], _T]
 
 
-class DataError(ValueError):
-    """Base class for data-related exceptions."""
-
-    pass
-
-
-class FieldError(DataError):
+class FieldError(DataError, ValueError):
     """Exception raised for field-related errors."""
 
     pass
@@ -88,66 +73,14 @@ def raiseFieldError(func: typing.Callable[_P, _R]) -> typing.Callable[_P, _R]:
     return wrapper
 
 
-def bound_method(
-    func: typing.Optional[typing.Callable[_P, _R]] = None, *, force: bool = False
-) -> typing.Union[
-    typing.Callable[[typing.Callable[_P, _R]], typing.Callable[_P, _R]],
-    typing.Callable[_P, _R],
-]:
-    """Decorator to ensure that a method is only called on a bound field."""
-
-    def decorator(func: typing.Callable[_P, _R]) -> typing.Callable[_P, _R]:
-        if not inspect.isroutine(func):
-            raise TypeError("Bound method decorator can only be used on methods.")
-
-        if getattr(func, "_bound_method", False):
-            # Method is already marked as a bound method
-            return func
-
-        @functools.wraps(func)
-        def wrapper(self: "_Field", *args: _P.args, **kwargs: _P.kwargs) -> _R:
-            if (
-                force or func.__name__ in type(self).__boundmethods__
-            ) and not self.is_bound():
-                raise FieldError(
-                    f"{type(self).__name__} field must be bound to a parent class to access the `{func.__name__}` method."
-                )
-            return func(self, *args, **kwargs)
-
-        wrapper._bound_method = True
-        return wrapper
-
-    if func is None:
-        return decorator
-    return decorator(func)
-
-
 class FieldMeta(type):
     """Metaclass for Field types"""
 
     def __new__(meta_cls, name, bases, attrs):
         new_cls = super().__new__(meta_cls, name, bases, attrs)
-
-        bound_methods = meta_cls.get_bound_methods(new_cls)
-        for method_name in bound_methods:
-            method = getattr(new_cls, method_name)
-            setattr(new_cls, method_name, bound_method(method))
-        new_cls.__boundmethods__ = tuple(bound_methods)
-
         meta_cls.clean_null_values(new_cls)
         meta_cls.clean_blank_values(new_cls)
         return new_cls
-
-    @staticmethod
-    def get_bound_methods(cls: "_Field"):
-        bound_methods = []
-        for key, value in cls.__dict__.items():
-            if not inspect.isroutine(value):
-                continue
-            if getattr(value, "_bound_method", False):
-                bound_methods.append(key)
-
-        return set([*getattr(cls, "__boundmethods__", ()), *bound_methods])
 
     @staticmethod
     def clean_blank_values(cls: "_Field"):
@@ -183,10 +116,6 @@ class Field(typing.Generic[_T], metaclass=FieldMeta):
 
     __valuestore__: str = "__dict__"
     """Name of the attribute used to store field values on the instance."""
-    __boundmethods__: typing.Tuple[str] = ("to_json",)
-    # Add these defaults just in case they are overridden and not redecorated,
-    # we still want them to be a bound method as long as this tuple has not be overridden/update
-    """Tuple of methods that require the field to be bound to a parent class."""
 
     def __init__(
         self,
@@ -200,6 +129,7 @@ class Field(typing.Generic[_T], metaclass=FieldMeta):
             typing.Iterable[FieldValidator[_T, "_Field"]]
         ] = None,
         default: typing.Union[_T, DefaultFactory, typing.Type[empty]] = empty,
+        onsetvalue: typing.Optional[typing.Callable[[typing.Any], typing.Any]] = None,
     ):
         """
         Initialize the field.
@@ -210,7 +140,11 @@ class Field(typing.Generic[_T], metaclass=FieldMeta):
         :param allow_blank: If True, permits blank values, defaults to True.
         :param required: If True, field values must be explicitly provided, defaults to False.
         :param validators: A list of validation functions to apply to the field's value, defaults to None.
+            Validators should be callables that accept the field value and the optional field instance as arguments.
+            NOTE: Values returned from the validators are not used, but they should raise a FieldError if the value is invalid.
         :param default: A default value for the field to be used if no value is set, defaults to empty.
+        :param onsetvalue: Callable to run on the value before setting it, defaults to None.
+            Use this to modify the value before it is validated and set on the instance.
         """
         if not self._object_is_type(_type):
             raise TypeError(f"Specified type '{_type}' is not a valid type.")
@@ -223,6 +157,11 @@ class Field(typing.Generic[_T], metaclass=FieldMeta):
         self.validators = list(validators or [])
         self._default = default
         self._parent = None
+        self._name = None
+
+        if onsetvalue and not callable(onsetvalue):
+            raise TypeError("onsetvalue must be a callable.")
+        self._onsetvalue = onsetvalue
 
         if self.required and default is not empty:
             raise FieldError("A default value is not necessary when required=True")
@@ -241,6 +180,11 @@ class Field(typing.Generic[_T], metaclass=FieldMeta):
         instance = super().__new__(cls)
         instance._init_args = args
         instance._init_kwargs = kwargs
+
+        # Setup the valuestore for the instance
+        valuestore = getattr(instance, cls.__valuestore__, None)
+        if valuestore is None:
+            setattr(instance, cls.__valuestore__, {})
         return instance
 
     @staticmethod
@@ -253,26 +197,24 @@ class Field(typing.Generic[_T], metaclass=FieldMeta):
     @property
     def __values__(self) -> typing.Dict[str, typing.Any]:
         """Return the field values store for the instance."""
-        if not hasattr(self, type(self).__valuestore__):
-            setattr(self, type(self).__valuestore__, {})
-
         valuestore = getattr(self, type(self).__valuestore__, {})
-        if not isinstance(valuestore, dict):
-            raise FieldError(
-                f"Field value store must be a dictionary, not {type(valuestore).__name__}"
-            )
         return valuestore
 
     @__values__.setter
     def __values__(self, value):
         setattr(self, type(self).__valuestore__, value)
 
-    @bound_method(force=True)
-    def get_name(self) -> str:
+    def get_name(self, raise_no_name: bool = True) -> typing.Optional[str]:
         """Get the effective name of the field."""
-        return self.alias or self._name
+        name = self.alias or self._name
 
-    def get_type(self) -> typing.Type[_T]:
+        if raise_no_name and name is None:
+            raise FieldError(
+                f"{type(self).__name__} has no name. Ensure it has been bound to a parent class or provide an alias."
+            )
+        return name
+
+    def get_type(self) -> typing.Union[typing.Type[_T], typing.Type[undefined]]:
         """Return the expected type for field values."""
         return self._type
 
@@ -315,7 +257,7 @@ class Field(typing.Generic[_T], metaclass=FieldMeta):
 
         self.bind(owner, name)
 
-    @bound_method(force=True)
+    @raiseFieldError
     def __get__(
         self,
         instance: typing.Optional["_Field"],
@@ -332,14 +274,8 @@ class Field(typing.Generic[_T], metaclass=FieldMeta):
                 f"'{type(instance).__name__}.{field_name}' has no defined value. Provide a default or set required=True."
             )
         return value
-        # Validation on retrieval may prevent in-place manipulation of field values (which can be a good thing),
-        # because running validation logic on the value may return a new value/object.
-        # Also, validating the value on retrieval will ensure that the value is always valid
-        # but may have performance implications. Especially when validation logic is long and complex.
-        # TODO: Might add a instantiation variable to control validation on retrieval, if needed.
-        # return self.validate(value, instance)
 
-    @bound_method(force=True)
+    @raiseFieldError
     def __set__(self, instance: "_Field", value: typing.Any):
         """Set and validate the field value on an instance."""
         field_name = self.get_name()
@@ -349,11 +285,18 @@ class Field(typing.Generic[_T], metaclass=FieldMeta):
                     f"'{type(instance).__name__}.{field_name}' is a required field."
                 )
             return
-        instance.__values__[field_name] = self.validate(value, instance)
+
+        if callable(self._onsetvalue):
+            value = self._onsetvalue(value)
+
+        validated_value = self.validate(value, instance)
+        if isinstance(validated_value, Field) and not validated_value.is_bound():
+            validated_value.bind(type(self), self._name)
+        instance.__values__[field_name] = validated_value
 
     def check_type(self, value: typing.Any) -> typing.TypeGuard[_T]:
         """Check if the value is of the expected type."""
-        if self.get_type() is Undefined:
+        if self.get_type() is undefined:
             return True
         return isinstance(value, self.get_type())
 
@@ -380,9 +323,8 @@ class Field(typing.Generic[_T], metaclass=FieldMeta):
             return False
         return issubclass(self._parent, Field) and self._name is not None
 
-    @bound_method(force=True)
     @raiseFieldError
-    def validate(self, value: typing.Any, instance: "_Field") -> _T:
+    def validate(self, value: typing.Any, instance: typing.Optional["_Field"]) -> _T:
         """
         Ensure the value meets field requirements and validation criteria.
 
@@ -391,46 +333,52 @@ class Field(typing.Generic[_T], metaclass=FieldMeta):
         field_name = self.get_name()
         if self.is_null(value):
             if not self.allow_null:
-                raise FieldError(f"'{self.get_name()}' is not nullable.")
+                raise FieldError(
+                    f"'{field_name}' is not nullable but got null value '{value}'."
+                )
             return None
 
-        value = self.cast_to_type(value)
-        if self.is_blank(value):
+        casted_value = self.cast_to_type(value)
+        if self.is_blank(casted_value):
             if not self.allow_blank:
-                raise FieldError(f"'{self.get_name()}' cannot be blank.")
+                raise FieldError(
+                    f"'{field_name}' cannot be blank but got blank value '{casted_value}'."
+                )
 
-        if not self.check_type(value):
+        if not self.check_type(casted_value):
             raise FieldError(
-                f"'{field_name}' must be of type/form '{self._repr_type(self.get_type())}' not '{type(value).__name__}'."
+                f"'{field_name}' must be of type/form '{self._repr_type(self.get_type())}', not '{type(casted_value).__name__}'."
             )
 
-        self.run_validators(value, instance)
-        return value
+        self.run_validators(casted_value, instance)
+        return casted_value
 
     def __delete__(self, instance: "_Field"):
-        instance.__values__.pop(self.get_name())
-
-    def __repr__(self) -> str:
-        """Return a string representation of the field."""
-        return f"{type(self).__name__}[{id(self)}]<{self._repr_type(self.get_type())}>"
+        try:
+            instance.__values__.pop(self.get_name())
+        except (KeyError, FieldError):
+            # Ignore if the field value is not set
+            # or has not been bound to a parent class
+            pass
 
     # Allow generic typing checking for fields.
     def __class_getitem__(cls, *args, **kwargs):
         return cls
 
-    def cast_to_type(self, value: typing.Any):
-        """Attempt to cast the value to the field's specified type."""
+    def cast_to_type(self, value: typing.Any) -> _T:
+        """
+        Cast the value to the field's specified type, if necessary.
+
+        Converts the field's value to the specified type before it is set on the instance.
+        """
         field_type = self.get_type()
+        if issubclass(field_type, undefined) or isinstance(value, field_type):
+            # If the value is a field, use a copy of the field to avoid shared state.
+            if isinstance(value, Field):
+                return copy.deepcopy(value)
+            return value
 
-        if field_type is Undefined:
-            return value
-        if isinstance(value, field_type):
-            return value
-
-        try:
-            return field_type(value)
-        except (TypeError, ValueError):
-            return value
+        return field_type(value)
 
     def is_blank(self, value: _T) -> bool:
         """
@@ -463,7 +411,6 @@ class Field(typing.Generic[_T], metaclass=FieldMeta):
                 validator(value)
         return
 
-    @bound_method
     def to_json(self, instance: "_Field") -> typing.Any:
         """
         Return a JSON serializable representation of the field's value on the instance.
@@ -484,8 +431,6 @@ class Field(typing.Generic[_T], metaclass=FieldMeta):
     @staticmethod
     def _repr_type(_type: typing.Type) -> str:
         """Return a string representation of the field type."""
-        if _type is Undefined:
-            return "UNDEFINED"
         if isinstance(_type, typing._SpecialForm):
             return _type._name
 
@@ -502,15 +447,15 @@ class Field(typing.Generic[_T], metaclass=FieldMeta):
             return value.lower()
         return value
 
-    NO_DEEPCOPY_ARGS = ()
+    NO_DEEPCOPY_ARGS: typing.Tuple[int] = ()
     """
-    Set of arguments that should not be deepcopied when copying the field.
+    Indices of arguments that should not be deepcopied when copying the field.
 
     This is useful for arguments that are immutable or should not be copied to avoid shared state.
     """
-    NO_DEEPCOPY_KWARGS = ("validators", "regex")
+    NO_DEEPCOPY_KWARGS: typing.Tuple[str] = ("validators", "regex")
     """
-    Set of keyword arguments that should not be deepcopied when copying the field.
+    Names of keyword arguments that should not be deepcopied when copying the field.
 
     This is useful for arguments that are immutable or should not be copied to avoid shared state.
     """
@@ -519,10 +464,10 @@ class Field(typing.Generic[_T], metaclass=FieldMeta):
         args = [
             (
                 copy.deepcopy(arg, memo)
-                if arg not in type(self).NO_DEEPCOPY_ARGS
+                if index not in type(self).NO_DEEPCOPY_ARGS
                 else arg
             )
-            for arg in self._init_args
+            for index, arg in enumerate(self._init_args)
         ]
         kwargs = {
             key: (
@@ -533,6 +478,10 @@ class Field(typing.Generic[_T], metaclass=FieldMeta):
             for key, value in self._init_kwargs.items()
         }
         field_copy = self.__class__(*args, **kwargs)
+        field_copy.__values__ = merge_dicts(
+            field_copy.__values__,
+            copy.deepcopy(self.__values__, memo),
+        )
 
         if self.is_bound():
             field_copy.bind(self._parent, self._name)
@@ -557,6 +506,12 @@ class FieldInitKwargs(typing.TypedDict):
     """A list of validation functions to apply to the field's value."""
     default: typing.Union[_T, DefaultFactory, typing.Type[empty]]
     """A default value for the field to be used if no value is set."""
+    onsetvalue: typing.Optional[typing.Callable[[typing.Any], typing.Any]]
+    """
+    Callable to run on the value before setting it. 
+    
+    Use this to modify the value before it is validated and set on the instance.
+    """
 
 
 class AnyField(Field[typing.Any]):
@@ -564,7 +519,7 @@ class AnyField(Field[typing.Any]):
 
     def __init__(self, **kwargs: Unpack[FieldInitKwargs]):
         kwargs.setdefault("allow_null", True)
-        super().__init__(_type=Undefined, **kwargs)
+        super().__init__(_type=undefined, **kwargs)
 
 
 class BooleanField(Field[bool]):
@@ -624,7 +579,7 @@ class StringField(Field[str]):
         self.max_length = max_length or type(self).DEFAULT_MAX_LENGTH
         self.trim_whitespaces = trim_whitespaces
 
-    def validate(self, value: typing.Any, instance: "_Field") -> str:
+    def validate(self, value: typing.Any, instance: typing.Optional["_Field"]) -> str:
         validated_value = super().validate(value, instance)
         if validated_value is None:
             return None
@@ -661,7 +616,7 @@ class MinMaxValueMixin(typing.Generic[_T]):
         self.min_value = min_value
         self.max_value = max_value
 
-    def validate(self, value: typing.Any, instance: "_Field") -> _T:
+    def validate(self, value: typing.Any, instance: typing.Optional["_Field"]) -> _T:
         validated_value = super().validate(value, instance)
         if validated_value is None:
             return None
@@ -754,7 +709,7 @@ class BaseListField(Field[_T]):
         self.child.bind(type(self), "child")
         self.size = size
 
-    def validate(self, value: typing.Any, instance: "_Field"):
+    def validate(self, value: typing.Any, instance: typing.Optional["_Field"]):
         validated_value = super().validate(value, instance)
         if value is None:
             return None
@@ -801,7 +756,9 @@ class SetField(BaseListField[typing.Set]):
     ):
         super().__init__(_type=set, child=child, **kwargs)
 
-    def validate(self, value: typing.Any, instance: "_Field") -> typing.Set[_V]:
+    def validate(
+        self, value: typing.Any, instance: typing.Optional["_Field"]
+    ) -> typing.Set[_V]:
         if value is None:
             return None
 
@@ -822,7 +779,9 @@ class TupleField(BaseListField[typing.Tuple]):
     ):
         super().__init__(_type=tuple, child=child, **kwargs)
 
-    def validate(self, value: typing.Any, instance: "_Field") -> typing.Tuple[_V]:
+    def validate(
+        self, value: typing.Any, instance: typing.Optional["_Field"]
+    ) -> typing.Tuple[_V]:
         if value is None:
             return None
 
@@ -862,7 +821,7 @@ class EmailField(StringField):
 
     EMAIL_REGEX = r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
 
-    def validate(self, value: typing.Any, instance: "_Field") -> str:
+    def validate(self, value: typing.Any, instance: typing.Optional["_Field"]) -> str:
         validated_value = super().validate(value, instance)
         if validated_value is None:
             return None
@@ -894,7 +853,7 @@ class ChoiceMixin(typing.Generic[_T]):
             raise ValueError("Two or more choices are required")
         self.choices = choices
 
-    def validate(self, value: typing.Any, instance: "_Field"):
+    def validate(self, value: typing.Any, instance: typing.Optional["_Field"]):
         value = super().validate(value, instance)
         if value not in self.choices:
             raise FieldError(f"'{self.get_name()}' must be one of {self.choices}.")
@@ -958,7 +917,7 @@ class HexColorField(StringField):
     HEX_COLOR_REGEX = r"^#(?:[0-9a-fA-F]{3,4}){1,2}$"
     DEFAULT_MAX_LENGTH = 9
 
-    def validate(self, value: typing.Any, instance: "_Field"):
+    def validate(self, value: typing.Any, instance: typing.Optional["_Field"]):
         validated_value = super().validate(value, instance)
         if validated_value is None:
             return None
@@ -974,7 +933,7 @@ class RGBColorField(StringField):
     RGB_COLOR_REGEX = r"^rgb[a]?\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*(?:,\s*(\d{1,3})\s*)?\)$"
     DEFAULT_MAX_LENGTH = 38
 
-    def validate(self, value: typing.Any, instance: "_Field"):
+    def validate(self, value: typing.Any, instance: typing.Optional["_Field"]):
         validated_value = super().validate(value, instance)
         if validated_value is None:
             return None
@@ -991,7 +950,7 @@ class HSLColorField(StringField):
     HSL_COLOR_REGEX = r"^hsl[a]?\(\s*(\d{1,3})\s*,\s*(\d{1,3})%?\s*,\s*(\d{1,3})%?\s*(?:,\s*(\d{1,3})\s*)?\)$"
     DEFAULT_MAX_LENGTH = 40
 
-    def validate(self, value: typing.Any, instance: "_Field"):
+    def validate(self, value: typing.Any, instance: typing.Optional["_Field"]):
         validated_value = super().validate(value, instance)
         if validated_value is None:
             return None
@@ -1024,7 +983,7 @@ class IPAddressField(Field[typing.Union[ipaddress.IPv4Address, ipaddress.IPv6Add
 class SlugField(StringField):
     """Field for URL-friendly strings."""
 
-    def validate(self, value: typing.Any, instance: "_Field"):
+    def validate(self, value: typing.Any, instance: typing.Optional["_Field"]):
         validated_value = super().validate(value, instance)
         if validated_value is None:
             return None
@@ -1072,12 +1031,12 @@ class DateField(Field[datetime.date]):
         if self.input_format:
             return datetime.datetime.strptime(value, self.input_format).date()
 
-        deps_required({"django": "https://www.djangoproject.com/"})
-        from django.utils.dateparse import parse_date
+        deps_required({"dateutil": "python-dateutil"})
+        from dateutil.parser import parse
 
-        parsed_date = parse_date(value)
+        parsed_date = parse(value).date()
         if parsed_date is None:
-            raise ValueError("Invalid date value")
+            raise ValueError(f"Invalid date value - {value}")
         return parsed_date
 
     def cast_to_type(self, value: typing.Any) -> datetime.date:
@@ -1085,7 +1044,7 @@ class DateField(Field[datetime.date]):
             return value
 
         if not isinstance(value, str):
-            raise ValueError("Invalid date value")
+            raise ValueError(f"Invalid date value - {value}")
 
         return self.parse_date(value)
 
@@ -1127,12 +1086,12 @@ class TimeField(Field[datetime.time]):
         if self.input_format:
             return datetime.datetime.strptime(value, self.input_format).time()
 
-        deps_required({"django": "https://www.djangoproject.com/"})
-        from django.utils.dateparse import parse_time
+        deps_required({"dateutil": "python-dateutil"})
+        from dateutil.parser import parse
 
-        parsed_time = parse_time(value)
+        parsed_time = parse(value).time()
         if parsed_time is None:
-            raise ValueError("Invalid time value")
+            raise ValueError(f"Invalid time value - {value}")
         return parsed_time
 
     def cast_to_type(self, value: typing.Any) -> datetime.time:
@@ -1140,7 +1099,7 @@ class TimeField(Field[datetime.time]):
             return value
 
         if not isinstance(value, str):
-            raise ValueError("Invalid time value")
+            raise ValueError(f"Invalid time value - {value}")
 
         return self.parse_time(value)
 
@@ -1155,18 +1114,15 @@ class DurationField(Field[datetime.timedelta]):
     def __init__(self, **kwargs: Unpack[FieldInitKwargs]):
         super().__init__(_type=(str, datetime.timedelta), **kwargs)
 
-    @depends_on({"django": "https://www.djangoproject.com/"})
     def parse_duration(self, value: str) -> datetime.timedelta:
         """
         Parse the duration string into a timedelta object.
 
         Override this method to implement custom duration parsing logic.
         """
-        from django.utils.dateparse import parse_duration
-
         parsed_duration = parse_duration(value)
         if parsed_duration is None:
-            raise ValueError("Invalid duration value")
+            raise ValueError(f"Invalid duration value - {value}")
         return parsed_duration
 
     def cast_to_type(self, value: typing.Any) -> datetime.timedelta:
@@ -1174,7 +1130,7 @@ class DurationField(Field[datetime.timedelta]):
             return value
 
         if not isinstance(value, str):
-            raise ValueError("Invalid duration value")
+            raise ValueError(f"Invalid duration value - {value}")
 
         return self.parse_duration(value)
 
@@ -1223,12 +1179,12 @@ class DateTimeField(Field[datetime.datetime]):
         if self.input_format:
             return datetime.datetime.strptime(value, self.input_format)
 
-        deps_required({"django": "https://www.djangoproject.com/"})
-        from django.utils.dateparse import parse_datetime
+        deps_required({"dateutil": "python-dateutil"})
+        from dateutil.parser import parse
 
-        parsed_datetime = parse_datetime(value)
+        parsed_datetime = parse(value)
         if parsed_datetime is None:
-            raise ValueError("Invalid datetime value")
+            raise ValueError(f"Invalid datetime value - {value}")
         return parsed_datetime
 
     def cast_to_type(self, value: typing.Any) -> datetime.datetime:
@@ -1236,7 +1192,7 @@ class DateTimeField(Field[datetime.datetime]):
             parsed_datetime = value
         else:
             if not isinstance(value, str):
-                raise FieldError("Invalid datetime value")
+                raise FieldError(f"Invalid datetime value - {value}")
             parsed_datetime = self.parse_datetime(value)
 
         if self.tz:
@@ -1287,7 +1243,7 @@ class IOField(Field[typing.IO]):
     def __init__(self, **kwargs: Unpack[FieldInitKwargs]):
         super().__init__(_type=io.IOBase, **kwargs)
 
-    def validate(self, value: typing.Any, instance: "_Field"):
+    def validate(self, value: typing.Any, instance: typing.Optional["_Field"]):
         """Validate that the value is a file-like object."""
         validated_value = super().validate(value, instance)
         if validated_value is None:
@@ -1326,7 +1282,7 @@ class FileField(IOField):
         self.max_size = max_size
         self.allowed_types = allowed_types or []
 
-    def validate(self, value: typing.Any, instance: "_Field"):
+    def validate(self, value: typing.Any, instance: typing.Optional["_Field"]):
         """Validate the file object, checking size and type constraints."""
         file_obj = super().validate(value, instance)
         if file_obj is None:
@@ -1428,7 +1384,7 @@ try:
             try:
                 return parse(value)
             except Exception as exc:
-                raise FieldError("Invalid phone number") from exc
+                raise FieldError(f"Invalid phone number - {value}") from exc
 
         def to_json(self, instance: "_Field"):
             value: PhoneNumber = getattr(instance, self.get_name())
@@ -1464,166 +1420,8 @@ try:
 except ImportError:
     pass
 
-#####################
-# SIMPLE DATA CLASS #
-#####################
-
-
-class DataClassMeta(FieldMeta):
-    """Metaclass for dataclass types."""
-
-    def __new__(meta_cls, name, bases, attrs):
-        fields = {}
-        for key, value in attrs.items():
-            if isinstance(value, Field):
-                fields[key] = value
-
-        # Make fields read-only to prevent accidental modification
-        attrs["__fields__"] = MappingProxyType(fields)
-        return super().__new__(meta_cls, name, bases, attrs)
-
-
-class DataClass(Field[Self], metaclass=DataClassMeta):
-    """
-    Base class for simple dataclasses with field validation.
-
-    Dataclasses are defined by subclassing `DataClass` and defining fields as class attributes.
-    Dataclasses enforce type validation, field requirements, and custom validation functions.
-
-    Dataclasses can also be nested (like fields) within other dataclasses to create structured data.
-    """
-
-    __valuestore__ = "__data__"
-    __boundmethods__ = ("validate",)
-
-    def __init__(
-        self,
-        raw: typing.Optional[typing.Dict[str, typing.Any]] = None,
-        **kwargs: Unpack[FieldInitKwargs],
-    ) -> None:
-        """
-        Initialize the dataclass with raw data or keyword arguments.
-
-        :param raw: A dictionary of raw data to initialize the dataclass with.
-        :param kwargs: Additional keyword arguments to initialize the dataclass with.
-        """
-        super().__init__(_type=type(self), **kwargs)
-        if raw is not None:
-            self._load_raw(raw)
-        return
-
-    def _load_raw(self, raw: typing.Dict[str, typing.Any]):
-        """
-        Load raw data into the dataclass, initializing fields with the provided values.
-
-        :param raw: A dictionary of raw data to initialize the dataclass with.
-        :return: This same instance with the raw data loaded unto the fields.
-            i.e id(field) == id(field._load_raw(value))
-        """
-        if not isinstance(raw, dict):
-            raise TypeError("Raw data must be a dictionary.")
-
-        for key, field in type(self).__fields__.items():
-            field_name = field.get_name()
-            value = raw.get(field_name, field.get_default())
-            if isinstance(field, DataClass) and isinstance(value, dict):
-                # Load raw data into a copy of the dataclass instance
-                # (not the dataclass instance itself),
-                # to avoid shared state between instances.
-                value = copy.deepcopy(field)._load_raw(value)
-                # Since the data has been validated/loaded properly here,
-                # We can just set the value directly on this dataclass to avoid
-                # the reloading that would occur again in the __set__ method.
-                self.__values__[field_name] = value
-                continue
-
-            self._set_field_value(key, value, field)
-        return self
-
-    def _set_field_value(self, key: str, value: typing.Any, field: _Field) -> None:
-        """Set and validate a field value for initialization."""
-        if value is empty and field.required:
-            raise FieldError(
-                f"'{type(self).__name__}.{key}' is required but was not provided."
-            )
-
-        elif value is not empty:
-            setattr(self, key, value)
-        return
-
-    def __set__(self, instance: "_DataClass", value: typing.Any):
-        # If the value is of the exact same type as the dataclass,
-        # load the data on the value unto a copy of this dataclass.
-        if type(value) is type(self):
-            value = copy.deepcopy(self)._load_raw(value.to_dict())
-        return super().__set__(instance, value)
-
-    def __init_subclass__(cls) -> None:
-        """Ensure that subclasses define fields."""
-        if not getattr(cls, "__fields__", None):
-            raise TypeError("Subclasses must define fields")
-        return
-
-    def __repr__(self) -> str:
-        fields = [
-            (
-                f"{key}[{Field._repr_type(field.get_type())}]"
-                if not isinstance(field, DataClass)
-                else repr(field)
-            )
-            for key, field in self.__fields__.items()
-        ]
-        return f"{type(self).__name__}[{id(self)}]({', '.join(fields)})"
-
-    def to_dict(self) -> typing.Dict[str, typing.Any]:
-        """Return a dictionary representation of the dataclass."""
-        result = {}
-        for key, field in type(self).__fields__.items():
-            value = getattr(self, key)
-            if isinstance(value, DataClass):
-                value = value.to_dict()
-
-            result[field.get_name()] = value
-        return result
-
-    # Leave instance kwarg for uniformity/compatibility with Field.json method.
-    # However, DataClass classes do not need to access the instance as they contain
-    # the data required for serialization.
-    def to_json(self, instance: "_DataClass" = None) -> typing.Dict[str, typing.Any]:
-        """Return a JSON serializable representation of the dataclass."""
-        json_data = {}
-        for key, field in type(self).__fields__.items():
-            # If field is a DataClass, we cannot use the field present
-            # in cls.__fields__, as cls.__fields__ contains all fields initially captured
-            # during class instantiation. This class-specific fields are used
-            # to create a copy for the instance when the field's value is set on the instance.
-            # Therefore, it is shared across all instances of this class and will mostlikely not have any values set.
-            # Instead, we get the copy of the field specific to the instance.
-            # The instance's copy will contain the necessary values set on the field (if any)
-            if isinstance(field, DataClass):
-                field = getattr(self, key)
-
-            value = field.to_json(self)
-            field_name = field.get_name()
-            try:
-                json_data[field_name] = json.loads(json.dumps(value))
-            except (TypeError, ValueError) as exc:
-                raise FieldError(
-                    f"Failed to serialize '{type(self).__name__}.{field_name}' to JSON. "
-                    "Consider implementing a custom json method or using a supported type."
-                ) from exc
-        return json_data
-
-    def __getitem__(self, key: str) -> typing.Any:
-        if key not in type(self).__fields__:
-            raise FieldError(f"Field '{key}' does not exist in {type(self).__name__}")
-        return getattr(self, key)
-
-
-_DataClass = typing.TypeVar("_DataClass", bound=DataClass, covariant=True)
 
 __all__ = [
-    "DataError",
     "FieldError",
     "Field",
     "FieldInitKwargs",
@@ -1662,5 +1460,5 @@ __all__ = [
     "FileField",
     "PhoneNumberField",
     "PhoneNumberStringField",
-    "DataClass",
+    "_Field",
 ]
