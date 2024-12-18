@@ -1,11 +1,10 @@
 # Import necessary packages and modules
 import typing
 from datetime import date, datetime
-from django.utils import timezone
 import zoneinfo
 import attrs
 
-from helpers.utils.time import timeit
+from helpers.generics.utils.time import timeit
 from .mock_data import course_data, student_data, year_data
 from dateutil.parser import parse
 
@@ -29,7 +28,7 @@ class AcademicYear:
     end_date: date = attrs.field(
         default=None, converter=lambda x: parse(x).date()
     )
-    created_at: datetime = attrs.field(factory=timezone.now)
+    created_at: datetime = attrs.field(factory=datetime.now)
 
 
 @attrs.define(kw_only=True, auto_attribs=True)
@@ -45,7 +44,7 @@ class Course:
         converter=str,
     )
     year: AcademicYear = attrs.field()
-    created_at: datetime = attrs.field(factory=timezone.now)
+    created_at: datetime = attrs.field(factory=datetime.now)
 
 
 @attrs.define(kw_only=True, auto_attribs=True)
@@ -61,10 +60,10 @@ class Student:
     courses: typing.List[Course] = attrs.field(factory=list)
     joined_at: typing.Optional[datetime] = attrs.field(
         default=None,
-        converter=lambda x: timezone.now() if x is None else parse(x),
+        converter=lambda x: datetime.now() if x is None else parse(x),
     )
     created_at: datetime = attrs.field(
-        factory=lambda: timezone.now().astimezone(zoneinfo.ZoneInfo("Africa/Lagos"))
+        factory=lambda: datetime.now().astimezone(zoneinfo.ZoneInfo("Africa/Lagos"))
     )
 
 

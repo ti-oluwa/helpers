@@ -1,10 +1,10 @@
 # Import necessary packages and modules
 import typing
-from django.utils import timezone
 import zoneinfo
+from datetime import datetime
 
-from helpers.data_utils import dataclasses as dc
-from helpers.utils.time import timeit
+from helpers.generics.data_utils import dataclasses as dc
+from helpers.generics.utils.time import timeit
 from .mock_data import course_data, student_data, year_data
 
 
@@ -18,7 +18,7 @@ class AcademicYear(dc.DataClass):
     name = dc.StringField(max_length=100)
     start_date = dc.DateField()
     end_date = dc.DateField()
-    created_at = dc.DateTimeField(default=timezone.now)
+    created_at = dc.DateTimeField(default=datetime.now)
 
 
 class Course(dc.DataClass):
@@ -28,7 +28,7 @@ class Course(dc.DataClass):
     name = dc.StringField(max_length=100)
     code = dc.StringField(max_length=20)
     year = dc.Field(AcademicYear)  # Alternative: AcademicYear(...)
-    created_at = dc.DateTimeField(default=timezone.now)
+    created_at = dc.DateTimeField(default=datetime.now)
 
 
 class Student(dc.DataClass):
@@ -43,7 +43,7 @@ class Student(dc.DataClass):
     courses = dc.ListField(Course())
     joined_at = dc.DateTimeField(allow_null=True, tz=zoneinfo.ZoneInfo("Africa/Lagos"))
     created_at = dc.DateTimeField(
-        default=timezone.now, tz=zoneinfo.ZoneInfo("Africa/Lagos")
+        default=datetime.now, tz=zoneinfo.ZoneInfo("Africa/Lagos")
     )
 
 
