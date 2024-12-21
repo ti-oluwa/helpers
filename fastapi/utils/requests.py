@@ -1,11 +1,13 @@
 import typing
-import fastapi
-
+import starlette.requests
 import ipaddress
 
 
+_Request = typing.TypeVar("_Request", bound=starlette.requests.Request)
+
+
 def get_ip_address(
-    request: fastapi.Request,
+    request: _Request,
 ) -> typing.Union[ipaddress.IPv4Address, ipaddress.IPv6Address]:
     """
     Returns the IP address of the request.

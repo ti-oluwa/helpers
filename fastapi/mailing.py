@@ -8,6 +8,12 @@ from .config import settings
 
 
 def get_connection(connection: str = "fastapi_mail") -> fastapi_mail.ConnectionConfig:
+    """
+    Get the connection configuration for the specified connection.
+
+    :param connection: The name of the connection to get as defined in the project settings.
+    :return: The connection configuration.
+    """
     connection_config = dict(settings.MAILING[connection])
     return fastapi_mail.ConnectionConfig(**connection_config)
 
@@ -40,7 +46,7 @@ async def send_message(
         )
     except Exception as exc:
         if not fail_silently:
-            raise MailError(exc)
+            raise MailError(exc) from exc
     return
 
 

@@ -11,6 +11,16 @@ def path(module: str, router_name: str = "router") -> fastapi.APIRouter:
 
     :param module: module path e.g. apps.users.endpoints
     :param router_name: router name. Default is `router`
+
+    Example Usage:
+    ```python
+    import fastapi
+
+    router = fastapi.APIRouter()
+
+    # Includes the router defined at apps.users.endpoints in this router
+    router.include_router(path("apps.users.endpoints", router_name="router"))
+    ```
     """
     try:
         return importlib.import_module(module).__dict__[router_name]

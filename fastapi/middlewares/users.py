@@ -1,21 +1,20 @@
-import fastapi
+from starlette.requests import HTTPConnection
 
 from helpers.fastapi.models.users import AbstractBaseUser, AnonymousUser
 
 
-async def RequestUserMiddleware(request: fastapi.Request, call_next):
+async def ConnectedUserMiddleware(connection: HTTPConnection, call_next):
     """
-    Middleware to add the request user to the request state.
+    Middleware that adds the connected user to the connection state.
 
-    request.state.user will be an AbstractBaseUser instance,
-    or AnonymousUser if no user can be associated with the request.
+    `connection.state.user` will be an AbstractBaseUser instance.
 
-    :param request: FastAPI request object
+    :param connection: `starlette.requests.HTTPConnection` instance.
     :param call_next: Next middleware in the chain
     """
-    request_user = getattr(request.state, "user", None)
-    if not isinstance(request_user, AbstractBaseUser):
-        request.state.user = AnonymousUser()
+    connected_user = getattr(connection.state, "user", None)
+    if not isinstance(connected_user, AbstractBaseUser):
+        connection.state.user = AnonymousUser()
     
-    response = await call_next(request)
+    response = await call_next(connection)
     return response

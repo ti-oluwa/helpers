@@ -1,5 +1,6 @@
 import fastapi
 import pydantic
+import starlette.exceptions
 
 
 INSTALLED_APPS = []
@@ -20,7 +21,7 @@ MIDDLEWARES = [
     "helpers.fastapi.middlewares.core.AllowedIPsMiddleware",
     "helpers.fastapi.middlewares.core.HostBlacklistMiddleware",
     "helpers.fastapi.middlewares.core.IPBlacklistMiddleware",
-    "helpers.fastapi.middlewares.users.RequestUserMiddleware",
+    "helpers.fastapi.middlewares.users.ConnectedUserMiddleware",
     "helpers.fastapi.response.middlewares.FormatJSONResponseMiddleware",
 ]
 
@@ -54,7 +55,7 @@ MAINTENANCE_MODE = {"status": "off", "message": "default:minimal_dark"}
 
 EXCEPTION_HANDLERS = {
     fastapi.exceptions.ValidationException: "helpers.fastapi.response.exception_handling.validation_exception_handler",
-    fastapi.exceptions.HTTPException: "helpers.fastapi.response.exception_handling.http_exception_handler",
+    starlette.exceptions.HTTPException: "helpers.fastapi.response.exception_handling.http_exception_handler",
     Exception: "helpers.fastapi.response.exception_handling.generic_exception_handler",
     pydantic.ValidationError: "helpers.fastapi.response.exception_handling.pydantic_validation_error_handler",
     fastapi.exceptions.RequestValidationError: "helpers.fastapi.response.exception_handling.request_validation_error_handler",

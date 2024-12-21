@@ -74,9 +74,9 @@ def create_admin_user(username: typing.Optional[str] = None):
         else:
             break
 
-    session = next(get_session())
-    session.add(user)
-    session.commit()
+    with get_session() as session:
+        session.add(user)
+        session.commit()
     sys.stdout.write(f"Admin user '{user.get_username()}' created successfully.")
     sys.stdout.flush()
 

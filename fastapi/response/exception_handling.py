@@ -1,5 +1,6 @@
 import fastapi
 import pydantic
+import starlette.exceptions
 
 from . import shortcuts
 
@@ -22,12 +23,13 @@ def validation_exception_handler(
 
 
 def http_exception_handler(
-    request: fastapi.Request, exc: fastapi.HTTPException
+    request: fastapi.Request, exc: starlette.exceptions.HTTPException
 ) -> fastapi.Response:
     """Prepares and returns a properly formatted response for an HTTP exception."""
     return shortcuts.error(
         status_code=exc.status_code,
         detail=exc.detail,
+        headers=exc.headers,
     )
 
 
@@ -42,4 +44,6 @@ def request_validation_error_handler(
     request: fastapi.Request, exc: fastapi.exceptions.RequestValidationError
 ) -> fastapi.Response:
     """Prepares and returns a properly formatted response for a request validation exception."""
-    return shortcuts.unprocessable_entity(errors=exc.errors())
+    return shortcuts.unprocessable_entity(
+        errors=exc.errors(), detail=str(exc.body) if exc.body else None
+    )

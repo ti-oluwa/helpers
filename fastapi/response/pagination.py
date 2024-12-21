@@ -1,8 +1,9 @@
 import typing
-import fastapi
 
+from starlette.requests import Request
 
 _T = typing.TypeVar("_T")
+_Request = typing.TypeVar("_Request", bound=Request)
 
 
 class _PaginatedData(typing.Generic[_T], typing.TypedDict):
@@ -15,7 +16,7 @@ class _PaginatedData(typing.Generic[_T], typing.TypedDict):
 
 
 def paginated_data(
-    request: fastapi.Request,
+    request: _Request,
     data: typing.Iterable[_T],
     limit: int,
     offset: int,

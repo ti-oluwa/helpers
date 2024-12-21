@@ -64,18 +64,20 @@ class Settings:
         if self.configured:
             return
 
-        defined = load_settings(os.environ[SETTINGS_ENV_VARIABLE])
-        defaults = _settings_from_module(default_settings)
-        aggregate = merge_dicts(defined, defaults)
+        user_defined_settings = load_settings(os.environ[SETTINGS_ENV_VARIABLE])
+        default_setting = _settings_from_module(default_settings)
+        aggregate_settings = merge_dicts(
+            default_setting, user_defined_settings, merge_nested=True
+        )
 
         for key, value in options:
             if not key.isupper():
                 raise ValueError(
                     "Options for settings should be provided in upper case."
                 )
-            aggregate[key] = value
+            aggregate_settings[key] = value
 
-        self.__dict__["_store"] = MappingProxy(aggregate, recursive=True)
+        self.__dict__["_store"] = MappingProxy(aggregate_settings, recursive=True)
 
 
 settings = Settings()

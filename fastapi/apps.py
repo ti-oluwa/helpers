@@ -1,9 +1,11 @@
+import asyncio
 import importlib
 import functools
 import inspect
 
 from .config import settings
 from .exceptions import AppError, AppConfigurationError
+from .utils.sync import sync_to_async
 
 
 class SubmoduleNotFoundError(AppError):
@@ -78,7 +80,7 @@ class App:
 
         return submodule
 
-    def configure(self):
+    async def configure(self):
         """
         Run app's configuration logic
 
@@ -89,9 +91,11 @@ class App:
             if not apps:
                 return
 
-            configure = getattr(apps, "ready", None)
-            if callable(configure):
-                configure()
+            configure = getattr(apps, "configure", None)
+            if asyncio.iscoroutinefunction(configure):
+                await configure()
+            elif callable(configure):
+                await sync_to_async(configure)()
         except Exception as exc:
             raise AppConfigurationError(f"Error configuring app '{self.name}'") from exc
         return
@@ -119,7 +123,7 @@ def discover_models(
     import sqlalchemy as sa
 
     for app in discover_apps():
-        if app.name not in apps:
+        if apps and app.name not in apps:
             continue
         models = app.models
         if not models:
@@ -134,9 +138,9 @@ def discover_models(
                 yield model
 
 
-def configure_apps():
+async def configure_apps():
     """
     Run configuration logic for all apps in the project
     """
     for app in discover_apps():
-        app.configure()
+        await app.configure()
