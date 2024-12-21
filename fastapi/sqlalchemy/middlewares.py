@@ -13,7 +13,7 @@ async def AsyncSessionMiddleware(request: fastapi.Request, call_next):
     Set the `ATOMIC_REQUESTS` setting to `True` to make the session commit once, at the end of the request,
     Even if the session is committed multiple times in the view/endpoint.
     """
-    async with next(get_async_session()) as session:
+    async with get_async_session() as session:
         request.state.db_session = session
         response = await call_next(request)
         return response
@@ -29,7 +29,7 @@ async def SessionMiddleware(request: fastapi.Request, call_next):
     Set the `ATOMIC_REQUESTS` setting to `True` to make the session commit once, at the end of the request,
     Even if the session is committed multiple times in the view/endpoint.
     """
-    with next(get_session()) as session:
+    with get_session() as session:
         request.state.db_session = session
         response = await call_next(request)
         return response

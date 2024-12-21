@@ -18,6 +18,7 @@ from typing import (
     Tuple,
 )
 import base64
+import functools
 from itertools import islice
 
 from .choice import ExtendedEnum
@@ -191,56 +192,109 @@ def get_dict_diff(dict1: Dict, dict2: Dict) -> Dict:
     return diff_dict
 
 
-# Left for compatibility where already in use
-def merge_dicts(
-    dict1: Dict,
-    dict2: Dict,
-    /,
-    *,
-    copy: Optional[Callable] = copy.copy,
-):
-    """Merges two (nested) dictionaries."""
-    return merge_mappings(dict1, dict2, copy=copy)
-
-
 _Mapping = TypeVar("_Mapping", bound=collections.abc.Mapping)
 
+
 def merge_mappings(
-    mapping1: _Mapping,
-    mapping2: _Mapping,
-    /,
-    *,
-    copy: Optional[Callable] = copy.copy,
+    *mappings: _Mapping,
+    merge_nested: bool = True,
+    merger: Optional[Callable[[_Mapping, _Mapping], _Mapping]] = None,
+    copier: Optional[Callable[[_Mapping], _Mapping]] = copy.copy,
 ) -> _Mapping:
-    # If either mapping is empty, return the other
-    if not mapping2:
-        return copy(mapping1) if callable(copy) else mapping1
-    if not mapping1:
-        return copy(mapping2) if callable(copy) else mapping2
+    """
+    Merges two or more mappings into a single mapping.
+    Starting from the back, each mapping is merged into the penultimate mapping.
 
-    if not (
-        isinstance(mapping1, collections.abc.Mapping)
-        or isinstance(mapping2, collections.abc.Mapping)
-    ):
-        raise TypeError("Both arguments must be dictionaries")
+    For example, merging `{"a": 1, "b": 2}`, `{"b": 3, "c": 4}`, `{"c": 5, "d": 6}`
+    would result in `{"a": 1, "b": 3, "c": 5, "d": 6}`.
 
-    merged = (
-        copy(mapping1) if callable(copy) else mapping1
-    )  # Start with (a copy of) mapping1
-    reference = (
-        copy(mapping2) if callable(copy) else mapping2
-    )  # Tak mapping2 as a reference for update
-    for key, value in reference.items():
-        if key in merged:
-            if isinstance(merged[key], dict) and isinstance(value, dict):
-                # Recursively merge mappings
-                merged[key] = merge_dicts(merged[key], value, copy=None)
+    :param mappings: The mappings to merge.
+    :param merge_nested: Whether to merge nested mappings. If set to `False`, nested mappings
+        will be overridden by the source mapping. Defaults to `True`.
+    :param merger: The function to use for merging nested mappings. If not provided, nested mappings
+        will be merged recursively using this function. Defaults to `None`.
+        An important not is that the merger should only use generic mapping properties when merging
+        E.g. merger's should use `value = mapping[key]`, instead of `mapping.get(key)`.
+        Except you are sure that the mapping all support the `get` method.
+    :param copier: The function to use for copying mappings.
+        Should return a new mapping with the same keys and values as the input mapping.
+        Defaults to `copy.copy`. Set to `None` to avoid copying, Although this is not recommended,
+        as modifications to the returned mapping may affect the input mappings and vice versa.
+    :return: A new mapping containing all the keys and values from the provided mappings.
+
+    Example Usage:
+    ```python
+    import collections
+
+    merged = merge_mappings(
+        {"a": 1, "b": 2},
+        {"b": 3, "c": 4},
+        {"c": 5, "d": {"e": 6}},
+        {"d": {"e": 7, "f": 8}},
+        merge_nested=True,
+        merger=collections.ChainMap,
+    )
+
+    print(merged)
+    # Output: {'a': 1, 'b': 3, 'c': 5, 'd': ChainMap({'e': 6}, {'e': 7, 'f': 8})}
+    ```
+    """
+    if not mappings:
+        raise ValueError("At least one mapping must be provided")
+
+    if not all(isinstance(mapping, collections.abc.Mapping) for mapping in mappings):
+        raise TypeError("All arguments must be mappings")
+
+    copier = copier or (
+        lambda x: x
+    )  # Just return the input mapping if no copier is provided
+    if len(mappings) == 1:
+        return copier(mappings[0])
+
+    merger = merger or _default_mappings_merger
+
+    # Start from the back and merge each mapping into the penultimate mapping
+    target = copier(mappings[-2])
+    source = mappings[-1]
+    for key, source_value in source.items():
+        if merge_nested is False or key not in target:
+            target[key] = source_value
             continue
-        else:
-            # If the key is not in mapping1 or the value is not a dictionary, override or add the value
-            merged[key] = value
-    return merged
+        # From here on merging of nested mappings is allowed and the
+        # source key has been confirmed to be in the target mapping
 
+        #  If the source and target values are both mappings, recursively merge
+        #  the source value into the target value
+        if isinstance(target[key], collections.abc.Mapping) and isinstance(
+            source_value, collections.abc.Mapping
+        ):
+            target[key] = merger(target[key], source_value)
+        else:
+            # Otherwise, just override the target value with the source value
+            target[key] = source_value
+
+    return merge_mappings(
+        *mappings[:-2],
+        target,
+        merge_nested=merge_nested,
+        merger=merger,
+        copier=copier,
+    )
+
+_default_mappings_merger = functools.partial(merge_mappings, copier=None)
+
+
+# Left for compatibility where already in use
+def merge_dicts(
+    *dicts: Dict,
+    **kwargs,
+):
+    """
+    Merges two or more dictionaries into a single dictionary.
+
+    Deprecated: Use `merge_mappings` instead.
+    """
+    return merge_mappings(*dicts, **kwargs)
 
 def merge_enums(name, *enums) -> ExtendedEnum:
     """

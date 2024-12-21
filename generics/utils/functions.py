@@ -1,16 +1,20 @@
+from ast import TypeVar
 import inspect
-from typing import Any, Callable, Dict
+from typing import Any, Callable, Dict, NamedTuple
 
 
 class _NOT_SET:
     """Sentinel object to indicate that a value was not provided."""
+
     def __bool__(self):
         return False
-    
+
     def __repr__(self):
         return "NOT_SET"
 
+
 NOT_SET = _NOT_SET()
+
 
 def get_function_params_details(func: Callable) -> Dict[str, Any]:
     """
@@ -93,6 +97,83 @@ def get_function_params_details(func: Callable) -> Dict[str, Any]:
     return details
 
 
+def add_parameter_to_signature(
+    func: Callable, parameter: inspect.Parameter, index: int = -1
+) -> Callable:
+    """
+    Adds a parameter to the function's signature at the specified index.
+
+    This may be useful when you need to modify the signature of a function
+    dynamically, such as when adding a new parameter to a function (via a decorator/wrapper).
+
+    :param func: The function to update.
+    :param parameter: The parameter to add.
+    :param index: The index at which to add the parameter. Negative indices are supported.
+        Default is -1, which adds the parameter at the end.
+        If the index greater than the number of parameters, a ValueError is raised.
+    :return: The updated function.
+
+    Example Usage:
+    ```python
+    import inspect
+    import typing
+    import functools
+    from typing_extensions import ParamSpec
+
+    _P = ParamSpec("_P")
+    _R = TypeVar("_R")
+
+
+    def my_func(a: int, b: str = "default"):
+        pass
+
+    def decorator(func: typing.Callable[_P, _R]) -> typing.Callable[_P, _R]:
+        def _wrapper(new_param: str, *args: _P.args, **kwargs: _P.kwargs) -> _R:
+            return func(*args, **kwargs)
+
+        return functools.wraps(func)(_wrapper)
+
+    wrapped_func = decorator(my_func) # returns wrapper function
+    assert "new_param" in inspect.signature(wrapped_func).parameters
+    >>> False
+    
+    # This will fail because the signature of the wrapper function is overridden by the original function's signature,
+    # when functools.wraps is used. To fix this, we can use the `add_parameter_to_signature` function.
+
+    wrapped_func = add_parameter_to_signature(
+        func=wrapped_func, 
+        parameter=inspect.Parameter(
+            name="new_param", 
+            kind=inspect.Parameter.POSITIONAL_OR_KEYWORD, 
+            annotation=str
+        ),
+        index=0 # Add the new parameter at the beginning
+    )
+    assert "new_param" in inspect.signature(wrapped_func).parameters
+    >>> True
+
+    # This way any new parameters added to the wrapper function will be preserved and logic using the
+    # function's signature will respect the new parameters.
+    """
+    sig = inspect.signature(func)
+    params = list(sig.parameters.values())
+
+    # Check if the index is valid
+    if index < 0:
+        index = len(params) + index + 1
+    elif index > len(params):
+        raise ValueError(
+            f"Index {index} is out of bounds for the function's signature. Maximum index is {len(params)}. "
+            "Use a '-1' index to add the parameter at the end, if needed."
+        )
+
+    params.insert(index, parameter)
+    new_sig = sig.replace(parameters=params)
+    func.__signature__ = new_sig
+    return func
+
+
 __all__ = [
     "get_function_params_details",
+    "add_parameter_to_signature",
 ]

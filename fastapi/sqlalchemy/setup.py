@@ -1,4 +1,5 @@
 import typing
+from contextlib import asynccontextmanager, contextmanager
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session, configure_mappers
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
@@ -16,6 +17,7 @@ SessionLocal = sessionmaker(
 )
 
 
+@contextmanager
 def get_session(
     session_type: typing.Optional[typing.Type[Session]] = None, **kwargs
 ):
@@ -26,7 +28,8 @@ def get_session(
     :param kwargs: Additional keyword arguments to pass to the session on creation
     """
     session_type = session_type or SessionLocal
-    yield session_type(**kwargs)
+    with session_type(**kwargs) as session:
+        yield session
 
 
 #########
@@ -39,7 +42,8 @@ AsyncSessionLocal = sessionmaker(
 )
 
 
-def get_async_session(
+@asynccontextmanager
+async def get_async_session(
     session_type: typing.Optional[typing.Type[AsyncSession]] = None, **kwargs
 ):
     """
@@ -49,7 +53,8 @@ def get_async_session(
     :param kwargs: Additional keyword arguments to pass to the session on creation
     """
     session_type = session_type or AsyncSessionLocal
-    yield session_type(**kwargs)
+    async with session_type(**kwargs) as session:
+        yield session
 
 
 def bind_db_to_model_base(db_engine, model_base: typing.Type) -> None:

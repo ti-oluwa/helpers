@@ -1,9 +1,11 @@
 import collections.abc
 from typing import Dict, Mapping, Union, Any
-import fastapi
-from starlette.middleware.base import BaseHTTPMiddleware
-from helpers.fastapi.exceptions import ImproperlyConfigured
 
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
+from starlette.responses import Response
+
+from helpers.fastapi.exceptions import ImproperlyConfigured
 from helpers.fastapi.config import settings
 from helpers.logging import log_exception
 from helpers import RESOURCES_PATH
@@ -96,12 +98,12 @@ class MaintenanceMiddleware(BaseHTTPMiddleware):
             "Content-Type": "text/html",
         }
 
-    async def dispatch(self, request: fastapi.Request, call_next) -> fastapi.Response:
+    async def dispatch(self, request: Request, call_next) -> Response:
         """Process the request."""
         if self._maintenance_mode_on():
             content = await self.get_response_content()
             headers = await self.get_response_headers()
-            return fastapi.Response(content, status_code=503, headers=headers)
+            return Response(content, status_code=503, headers=headers)
 
         response = await call_next(request)
         return response

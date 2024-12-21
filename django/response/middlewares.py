@@ -1,6 +1,6 @@
 import re
 import functools
-from typing import Dict, Mapping, Union, Any, Callable, List
+from typing import Dict, Mapping, Union, Any, List
 from django.utils.deprecation import MiddlewareMixin
 from django.utils.module_loading import import_string
 from django.http import HttpRequest, HttpResponse
@@ -59,7 +59,7 @@ class FormatJSONResponseMiddleware(MiddlewareMixin):
 
         return formatter
 
-    def check_is_json_response(self, response: HttpResponse) -> bool:
+    def is_json_response(self, response: HttpResponse) -> bool:
         """
         Check if the response is a JSON response.
 
@@ -78,7 +78,7 @@ class FormatJSONResponseMiddleware(MiddlewareMixin):
         """
         if not getattr(
             self.settings(), "enforce_format", True
-        ) and not self.check_is_json_response(response):
+        ) and not self.is_json_response(response):
             return False
 
         excluded_paths: List[str] = getattr(self.settings(), "exclude", [])

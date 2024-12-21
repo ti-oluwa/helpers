@@ -4,7 +4,8 @@ import importlib
 import re
 import functools
 from typing import List
-import fastapi
+from starlette.requests import Request
+from starlette.responses import Response
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.concurrency import run_in_threadpool
 
@@ -60,7 +61,7 @@ class FormatJSONResponseMiddleware(BaseHTTPMiddleware):
 
         return formatter
 
-    def check_is_json_response(self, response: fastapi.Response) -> bool:
+    def is_json_response(self, response: Response) -> bool:
         """
         Check if the response is a JSON response.
 
@@ -70,7 +71,7 @@ class FormatJSONResponseMiddleware(BaseHTTPMiddleware):
         return response.get("Content-Type", "").startswith("application/json")
 
     async def can_format(
-        self, request: fastapi.Request, response: fastapi.Response
+        self, request: Request, response: Response
     ) -> bool:
         """
         Check if the response can be formatted.
@@ -81,7 +82,7 @@ class FormatJSONResponseMiddleware(BaseHTTPMiddleware):
         """
         if not getattr(
             self.settings(), "enforce_format", True
-        ) and not self.check_is_json_response(response):
+        ) and not self.is_json_response(response):
             return False
 
         excluded_paths: List[str] = getattr(self.settings(), "exclude", [])
@@ -94,8 +95,8 @@ class FormatJSONResponseMiddleware(BaseHTTPMiddleware):
         return True
 
     async def format(
-        self, request: fastapi.Request, response: fastapi.Response
-    ) -> fastapi.Response:
+        self, request: Request, response: Response
+    ) -> Response:
         """
         Format the response.
 
@@ -118,22 +119,22 @@ class FormatJSONResponseMiddleware(BaseHTTPMiddleware):
         return formatted_response
 
     async def pre_format(
-        self, request: fastapi.Request, response: fastapi.Response
-    ) -> fastapi.Response:
+        self, request: Request, response: Response
+    ) -> Response:
         """
         Should contain logic to be executed before formatting the response.
         """
         return response
 
     async def post_format(
-        self, request: fastapi.Request, formatted_response: fastapi.Response
-    ) -> fastapi.Response:
+        self, request: Request, formatted_response: Response
+    ) -> Response:
         """
         Should contain logic to be executed after formatting the response.
         """
         return formatted_response
 
-    async def dispatch(self, request: fastapi.Request, call_next) -> fastapi.Response:
+    async def dispatch(self, request: Request, call_next) -> Response:
         response = await call_next(request)
         response = await self.pre_format(request, response)
         formatted_response = await self.format(request, response)
