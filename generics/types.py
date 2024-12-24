@@ -36,13 +36,21 @@ class MappingProxy(collections.abc.Mapping):
         mapping: SupportsKeysAndGetItem,
         *,
         recursive: bool = False,
-        copy: Optional[Callable] = copy.deepcopy,
+        copier: Optional[Callable] = copy.deepcopy,
     ) -> None:
         """
-        Initialize
+        Initialize the mapping proxy.
+
+        :param mapping: The mapping to wrap
+        :param recursive: Whether to recursively wrap nested mappings
+        :param copier: A function to copy the mapping before
+            wrapping. If None, the mapping is wrapped directly.
+            However, this is not recommended as it allows
+            modifications of the original mapping to affect
+            the proxy since a reference is stored instead of a new copy.
         """
-        if callable(copy):
-            mapping = copy(mapping)
+        if callable(copier):
+            mapping = copier(mapping)
 
         if recursive:
             self.__dict__["_wrapped"] = self._wrap_mapping_recursively(mapping)
@@ -58,7 +66,7 @@ class MappingProxy(collections.abc.Mapping):
         if isinstance(mapping, MappingProxyType):
             wrapped = mapping
         else:
-            # Wrapped in MappingProxyType to prevent modification of the original dictionary
+            # Wrapped in `MappingProxyType` to prevent modification of the original mapping
             wrapped = MappingProxyType(mapping)
         return wrapped
 
@@ -75,7 +83,7 @@ class MappingProxy(collections.abc.Mapping):
                 new_mapping[key] = cls(
                     cls._wrap_mapping_recursively(value),
                     recursive=False,
-                    copy=None,
+                    copier=None,
                 )
             else:
                 new_mapping[key] = value
@@ -99,12 +107,12 @@ class MappingProxy(collections.abc.Mapping):
         except TypeError:
             return self.__getattr__(key)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"{type(self).__name__}{repr(self._wrapped).removeprefix("mappingproxy")}"
 
     def __iter__(self):
         return iter(self._wrapped)
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self._wrapped)
 

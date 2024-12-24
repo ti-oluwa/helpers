@@ -46,6 +46,6 @@ from helpers.dependencies import deps_required
 
 deps_required({"redis": "redis"})
 
-from .base import configure  # noqa
+from .base import *  # noqa
 from .throttles import *  # noqa
 from .shortcuts import throttle  # noqa

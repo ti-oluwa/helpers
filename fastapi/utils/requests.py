@@ -1,24 +1,23 @@
 import typing
-import starlette.requests
+from starlette.requests import HTTPConnection
 import ipaddress
 
 
-_Request = typing.TypeVar("_Request", bound=starlette.requests.Request)
-
+_HTTPConnection = typing.TypeVar("_HTTPConnection", bound=HTTPConnection)
 
 def get_ip_address(
-    request: _Request,
+    connection: _HTTPConnection,
 ) -> typing.Union[ipaddress.IPv4Address, ipaddress.IPv6Address]:
     """
-    Returns the IP address of the request.
+    Returns the IP address of the connection client.
 
-    :param request: The request object
+    :param connection: The HTTP connection
     """
-    x_forwarded_for = request.headers.get("x-forwarded-for") or request.headers.get(
+    x_forwarded_for = connection.headers.get("x-forwarded-for") or connection.headers.get(
         "remote-addr"
     )
     if x_forwarded_for:
         ip = x_forwarded_for.split(",")[0]
     else:
-        ip = request.client.host
+        ip = connection.client.host
     return ipaddress.ip_address(ip)

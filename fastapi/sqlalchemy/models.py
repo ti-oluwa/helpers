@@ -1,16 +1,17 @@
-from typing import Type, TypeVar, Optional, Dict
+import typing
+from annotated_types import Ge
 import sqlalchemy as sa
 import inflection
-from sqlalchemy.orm import declared_attr, DeclarativeMeta, registry
+from sqlalchemy import orm
 
 
-mapper_registry = registry()
+mapper_registry = orm.registry()
 
 
 @mapper_registry.as_declarative_base()
 class ModelBase:
     """
-    Abstract base SQLAlchemy model class.
+    Declarative base for SQLAlchemy model.
     """
 
     def __unicode__(self) -> str:
@@ -24,10 +25,10 @@ class ModelBase:
         )
 
 
-_Model = TypeVar("_Model", bound=ModelBase)
+_Model = typing.TypeVar("_Model", bound=ModelBase)
 
 
-def get_app_name(model: Type[_Model]) -> Optional[str]:
+def get_app_name(model: typing.Type[_Model]) -> typing.Optional[str]:
     """
     Get the name of the app in which the model is defined.
 
@@ -56,7 +57,7 @@ def get_app_name(model: Type[_Model]) -> Optional[str]:
     return getattr(apps_module, "app_name", parent_name).rsplit(".", maxsplit=1)[-1]
 
 
-def _auto_tablename(model: Type[_Model]) -> Type[_Model]:
+def _auto_tablename(model: typing.Type[_Model]) -> typing.Type[_Model]:
     """Add a declarative attribute to auto-generate the table name for the model"""
     # Check if the class is mapped or already has a __tablename__
     # This is to avoid the warning thrown when hasattr(model, "__tablename__")
@@ -64,8 +65,8 @@ def _auto_tablename(model: Type[_Model]) -> Type[_Model]:
     if sa.inspect(model, raiseerr=False) is not None:
         return model
 
-    @declared_attr
-    def _tablename(model: Type[_Model]) -> str:
+    @orm.declared_attr
+    def _tablename(model: typing.Type[_Model]) -> str:
         app_name = get_app_name(model)
         model_name = inflection.tableize(model.__name__)
 
@@ -77,10 +78,10 @@ def _auto_tablename(model: Type[_Model]) -> Type[_Model]:
     return model
 
 
-class ModelBaseMeta(DeclarativeMeta):
+class ModelBaseMeta(orm.DeclarativeMeta):
     """Metaclass for SQLAlchemy ModelBase"""
 
-    def __new__(meta_cls, *args, **kwargs) -> Type[_Model]:
+    def __new__(meta_cls, *args, **kwargs) -> typing.Type[_Model]:
         new_cls = super().__new__(meta_cls, *args, **kwargs)
         auto_tablename = bool(getattr(new_cls, "__auto_tablename__", None))
         tablename = getattr(new_cls, "__tablename__", None)
@@ -106,12 +107,16 @@ class ModelBaseMeta(DeclarativeMeta):
                 yield key, value
 
 
-class Model(
-    ModelBase,
-    metaclass=ModelBaseMeta,
-):
+class Model(ModelBase, metaclass=ModelBaseMeta):
     """
-    Abstract base SQLAlchemy model with timestamp and UUID primary key fields
+    Abstract base SQLAlchemy model.
+
+    Intended to be used as a base class for all models in the application.
+
+    Subclasses can be used as dataclasses by also inheriting from `orm.MappedAsDataclass`.
+
+    Note: Subclasses should define the `__tablename__` attribute to specify the table name.
+    or set `__auto_tablename__` to True to auto-generate the table name based on the model and app name.
 
     By default;
     ```python
@@ -126,8 +131,7 @@ class Model(
     Defaults to False.
     """
 
-    id = sa.Column(
-        sa.Integer,
+    id: orm.Mapped[typing.Annotated[int, Ge(0)]] = orm.mapped_column(
         primary_key=True,
         index=True,
         doc="The primary key of the model",
@@ -136,8 +140,15 @@ class Model(
 
     @classmethod
     def get_fields(cls):
-        field_mappings: Dict[str, sa.Column] = dict(cls)
+        """
+        Returns a mapping of field/column name to `orm.MappedColumn`, of the model.
+        """
+        field_mappings: typing.Dict[str, orm.MappedColumn] = {}
+        for key, value in cls.__dict__.items():
+            if isinstance(value, orm.MappedColumn):
+                field_mappings[key] = value
+            elif isinstance(value, sa.Column):
+                mapped_column = orm.mapped_column()
+                mapped_column.column = value
+                field_mappings[key] = mapped_column
         return field_mappings
-
-
-_T = TypeVar("_T")
