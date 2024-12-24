@@ -8,10 +8,8 @@ from contextlib import asynccontextmanager
 import redis.asyncio as async_pyredis
 
 import fastapi
-from starlette.requests import Request, HTTPConnection
-from starlette.responses import Response
+from starlette.requests import HTTPConnection
 from starlette.status import HTTP_429_TOO_MANY_REQUESTS
-from starlette.websockets import WebSocket
 
 from helpers.fastapi.utils.requests import get_ip_address
 
@@ -37,10 +35,10 @@ ConnectionThrottledHandler = typing.Callable[
 
 async def default_connection_identifier(connection: _HTTPConnection) -> str:
     client_ip = get_ip_address(connection)
-    return client_ip.exploded + ":" + connection.scope["path"]
+    return f"{client_ip.exploded}:{connection.scope["path"]}"
 
 
-async def connection_throttled(
+async def default_connection_throttled(
     connection: _HTTPConnection, wait_period: _WaitPeriod, *args, **kwargs
 ):
     """
@@ -67,7 +65,7 @@ class APIThrottle:
     )
     lua_sha: typing.Optional[str] = None
     identifier: typing.Optional[ConnectionIdentifier[_HTTPConnection]] = None
-    connection_throttled_handler: typing.Optional[
+    connection_throttled: typing.Optional[
         ConnectionThrottledHandler[_HTTPConnection]
     ] = None
     lua_script = """local key = KEYS[1]
@@ -95,14 +93,14 @@ end"""
         identifier: ConnectionIdentifier[
             _HTTPConnection
         ] = default_connection_identifier,
-        connection_throttled_handler: ConnectionThrottledHandler[
+        connection_throttled: ConnectionThrottledHandler[
             _HTTPConnection
-        ] = connection_throttled,
+        ] = default_connection_throttled,
     ) -> None:
         cls.redis = redis
         cls.prefix = prefix
         cls.identifier = identifier
-        cls.connection_throttled_handler = connection_throttled_handler
+        cls.connection_throttled = connection_throttled
         cls.lua_sha = await redis.script_load(cls.lua_script)
 
     @classmethod
@@ -134,7 +132,7 @@ class APIThrottleInitKwargs(typing.TypedDict):
     """Connection to the Redis."""
     identifier: ConnectionIdentifier[_HTTPConnection]
     """Connected client identifier generator."""
-    connection_throttled_handler: ConnectionThrottledHandler[_HTTPConnection]
+    connection_throttled: ConnectionThrottledHandler[_HTTPConnection]
     """Default handler for throttled HTTP connections."""
 
 
@@ -204,5 +202,5 @@ __all__ = [
     "APIThrottle",
     "configure",
     "default_connection_identifier",
-    "connection_throttled",
+    "default_connection_throttled",
 ]

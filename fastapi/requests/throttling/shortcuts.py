@@ -13,6 +13,7 @@ from .base import (
     _HTTPConnection,
     ConnectionIdentifier,
     ConnectionThrottledHandler,
+    default_connection_identifier,
 )
 from .throttles import BaseThrottle, HTTPThrottle, NoLimit
 from helpers.fastapi.utils.sync import sync_to_async
@@ -25,8 +26,8 @@ _R = typing.TypeVar("_R")
 _S = typing.TypeVar("_S")
 
 Decorated = typing.Union[Function[_P, _R], CoroutineFunction[_P, _R]]
-Dependency = typing.Union[Function[_P, _R], CoroutineFunction[_P, _R]]
-_Throttle = typing.TypeVar("_Throttle", bound=BaseThrottle)
+Dependency = typing.Union[Function[_Q, _S], CoroutineFunction[_Q, _S]]
+_Throttle = typing.TypeVar("_Throttle", bound=BaseThrottle[_HTTPConnection])
 
 
 class ThrottleKwargs(typing.TypedDict):
@@ -42,13 +43,11 @@ class ThrottleKwargs(typing.TypedDict):
     """Time frame in minutes."""
     hours: int
     """Time frame in hours."""
-    connection_throttled_handler: typing.Optional[
-        ConnectionThrottledHandler[_HTTPConnection]
-    ]
+    connection_throttled: typing.Optional[ConnectionThrottledHandler[_HTTPConnection]]
     """Handler to call when the client connection is throttled."""
 
 
-class DecoratorDepends(typing.Generic[_P, _Q, _R, _S], fastapi.params.Depends):
+class DecoratorDepends(typing.Generic[_P, _R, _Q, _S], fastapi.params.Depends):
     """
     `fastapi.params.Depends` subclass that allows instances to be used as decorators.
 
@@ -65,25 +64,25 @@ class DecoratorDepends(typing.Generic[_P, _Q, _R, _S], fastapi.params.Depends):
     def __init__(
         self,
         dependency_decorator: Function[
-            [Decorated[_Q, _S], typing.Optional[Dependency[_P, _R]]],
-            Decorated[_Q, _S],
+            [Decorated[_P, _R], typing.Optional[Dependency[_Q, _S]]],
+            Decorated[_P, _R],
         ],
-        dependency: typing.Optional[Dependency[_P, _R]] = None,
+        dependency: typing.Optional[Dependency[_Q, _S]] = None,
         *,
         use_cache: bool = True,
     ):
         self.dependency_decorator = dependency_decorator
         super().__init__(dependency, use_cache=use_cache)
 
-    def __call__(self, decorated: Decorated[_Q, _S]):
+    def __call__(self, decorated: Decorated[_P, _R]):
         return self.dependency_decorator(decorated, self.dependency)
 
 
 # Is this worth it? Just because of the `throttle` decorator?
 def _wrap_route(
-    route: Decorated[_Q, _S],
+    route: Decorated[_P, _R],
     throttle: _Throttle,
-) -> Decorated[_Q, _S]:
+) -> Decorated[_P, _R]:
     """
     Create an wrapper that applies throttling to an route
     by wrapping the route such that the route depends on the throttle.
@@ -158,9 +157,9 @@ def route_wrapper(
 
 
 def _throttle_route(
-    route: Decorated[_Q, _S],
+    route: Decorated[_P, _R],
     throttle: _Throttle,
-) -> Decorated[_Q, _S]:
+) -> Decorated[_P, _R]:
     """
     Returns wrapper that applies throttling to the given route
     by wrapping the route such that the route depends on the throttle.
@@ -238,15 +237,9 @@ def throttle(
         return {"message": "Limited route"}
     ```
     """
-    connection_throttled_handler = throttle_kwargs.pop(
-        "connection_throttled_handler", None
-    )
-    if connection_throttled_handler and not asyncio.iscoroutinefunction(
-        connection_throttled_handler
-    ):
-        throttle_kwargs["connection_throttled_handler"] = sync_to_async(
-            connection_throttled_handler
-        )
+    connection_throttled = throttle_kwargs.pop("connection_throttled", None)
+    if connection_throttled and not asyncio.iscoroutinefunction(connection_throttled):
+        throttle_kwargs["connection_throttled"] = sync_to_async(connection_throttled)
 
     if identifier and not asyncio.iscoroutinefunction(identifier):
         identifier = sync_to_async(identifier)
@@ -266,11 +259,39 @@ def throttle(
 
 
 def get_referrer(connection: _HTTPConnection) -> str:
-    return connection.headers.get("referer", "") or connection.headers.get("origin", "")
+    return (
+        (connection.headers.get("referer", "") or connection.headers.get("origin", ""))
+        .split("?")[0]
+        .strip("/")
+        .lower()
+    )
 
 
-def connection_user_agent_identifier(connection: _HTTPConnection) -> str:
-    return connection.headers.get("user-agent", "") + ":" + connection.scope["path"]
+async def connection_user_agent_identifier(connection: _HTTPConnection) -> str:
+    user_agent = connection.headers.get("user-agent", "")
+    return f"{user_agent}:{connection.scope["path"]}"
+
+
+async def anonymous_connection_identifier(connection: _HTTPConnection) -> str:
+    connected_user = getattr(connection.state, "user", None)
+    if connected_user and getattr(connected_user, "is_authenticated", False):
+        raise NoLimit()
+
+    identifier = await default_connection_identifier(connection)
+    return f"anonymous:{identifier}"
+
+
+async def authenticated_connection_identifier(connection: _HTTPConnection) -> str:
+    connected_user = getattr(connection.state, "user", None)
+    if connected_user and not getattr(connected_user, "is_authenticated", False):
+        raise NoLimit()
+
+    pk = getattr(connected_user, "pk", None) or getattr(connected_user, "id", None)
+    if pk is not None:
+        identifier = f"{str(pk)}:{connection.scope["path"]}"
+
+    identifier = await default_connection_identifier(connection)
+    return f"authenticated:{identifier}"
 
 
 # ---------- CUSTOM THROTTLES ---------- #
@@ -294,13 +315,13 @@ def referrer_throttle(
         ]
     referrer = set(referrer)
 
-    def referrer_identifier(request: starlette.requests.Request) -> str:
+    async def referrer_identifier(request: starlette.requests.Request) -> str:
         nonlocal referrer
 
         request_referrer = get_referrer(request)
         if request_referrer not in referrer:
             raise NoLimit()
-        return request_referrer + ":" + request.scope["path"]
+        return f"referer:{request_referrer}:{request.scope["path"]}"
 
     return throttle(
         identifier=referrer_identifier,
@@ -312,11 +333,23 @@ def referrer_throttle(
 user_agent_throttle = functools.partial(
     throttle, identifier=connection_user_agent_identifier
 )
-"""Throttle route connections based on the user agent."""
+"""Throttle route connections based on the HTTP connection user agent."""
+
+anonymous_connection_throttle = functools.partial(
+    throttle, identifier=anonymous_connection_identifier
+)
+"""Throttle for anonymous/unauthenticated HTTP connections"""
+
+authenticated_connection_throttle = functools.partial(
+    throttle, identifier=authenticated_connection_identifier
+)
+"""Throttle for authenticated HTTP connections"""
 
 
 __all__ = [
     "throttle",
     "referrer_throttle",
     "user_agent_throttle",
+    "anonymous_connection_throttle",
+    "authenticated_connection_throttle",
 ]

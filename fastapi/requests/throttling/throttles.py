@@ -107,7 +107,7 @@ class BaseThrottle(typing.Generic[_HTTPConnection], metaclass=ThrottleMeta):
         minutes: typing.Annotated[int, Ge(-1)] = 0,
         hours: typing.Annotated[int, Ge(-1)] = 0,
         identifier: typing.Optional[ConnectionIdentifier[_HTTPConnection]] = None,
-        connection_throttled_handler: typing.Optional[
+        connection_throttled: typing.Optional[
             ConnectionThrottledHandler[_HTTPConnection]
         ] = None,
     ):
@@ -120,14 +120,14 @@ class BaseThrottle(typing.Generic[_HTTPConnection], metaclass=ThrottleMeta):
         :param minutes: Time period in minutes
         :param hours: Time period in hours
         :param identifier: Connected client identifier generator.
-        :param connection_throttled_handler: Handler to call when the client connection is throttled
+        :param connection_throttled: Handler to call when the client connection is throttled
         """
         self.limit = limit
         self.milliseconds = (
             milliseconds + 1000 * seconds + 60000 * minutes + 3600000 * hours
         )
         self.identifier = identifier
-        self.connection_throttled_handler = connection_throttled_handler
+        self.connection_throttled = connection_throttled
 
     async def get_wait_period(self, key: str) -> int:
         """
@@ -159,12 +159,12 @@ class BaseThrottle(typing.Generic[_HTTPConnection], metaclass=ThrottleMeta):
 
         key = await self.get_key(connection, *args, **kwargs)
         wait_period = await self.get_wait_period(key)
-        connection_throttled_handler = (
-            self.connection_throttled_handler
-            or APIThrottle.connection_throttled_handler
+        connection_throttled = (
+            self.connection_throttled
+            or APIThrottle.connection_throttled
         )
         if wait_period != 0:
-            return await connection_throttled_handler(
+            return await connection_throttled(
                 connection, wait_period, *args, **kwargs
             )
         return None

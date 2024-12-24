@@ -1,7 +1,10 @@
 import collections
 import collections.abc
+import datetime
 import typing
+from annotated_types import MaxLen
 import sqlalchemy as sa
+from sqlalchemy import orm
 import sqlalchemy_utils as sa_utils
 
 from helpers.fastapi.sqlalchemy import models
@@ -20,27 +23,42 @@ class AbstractBaseUser(models.Model):
         return True
 
     @property
-    def is_anonymous(self):
+    def is_anonymous(self) -> bool:
         return not self.is_authenticated
 
 
 class AbstractUserMeta(models.ModelBaseMeta):
     def __new__(meta_cls, *args, **kwargs):
         new_cls = super().__new__(meta_cls, *args, **kwargs)
+        meta_cls.check_username_field(new_cls)
+        meta_cls.check_required_fields(new_cls)
+        return new_cls
 
-        if new_cls.USERNAME_FIELD not in new_cls.get_fields():
+    @staticmethod
+    def check_username_field(cls):
+        field = cls.get_fields().get(cls.USERNAME_FIELD, None)
+        if not field:
             raise ValueError(
-                f"USERNAME_FIELD '{new_cls.USERNAME_FIELD}' not found in model {new_cls.__name__}"
+                f"USERNAME_FIELD '{cls.USERNAME_FIELD}' not found in model {cls.__name__}"
             )
+        if field.column.nullable:
+            raise ValueError(
+                f"USERNAME_FIELD '{cls.USERNAME_FIELD}' must not be nullable"
+            )
+        if not field.column.unique:
+            raise ValueError(f"USERNAME_FIELD '{cls.USERNAME_FIELD}' must be unique")
+        return None
 
-        for field in new_cls.REQUIRED_FIELDS:
-            if field not in new_cls.get_fields():
+    @staticmethod
+    def check_required_fields(cls):
+        for field in cls.REQUIRED_FIELDS:
+            if field not in cls.get_fields():
                 raise ValueError(
-                    f"REQUIRED_FIELDS '{field}' not found in model {new_cls.__name__}"
+                    f"REQUIRED_FIELDS '{field}' not found in model {cls.__name__}"
                 )
 
-        if isinstance(new_cls.REQUIRED_FIELDS, collections.abc.Mapping):
-            for field_name, value in new_cls.REQUIRED_FIELDS.items():
+        if isinstance(cls.REQUIRED_FIELDS, collections.abc.Mapping):
+            for field_name, value in cls.REQUIRED_FIELDS.items():
                 if not is_iterable(value):
                     raise ValueError(
                         f"REQUIRED_FIELDS mapping value for '{field_name}' must be an iterable"
@@ -48,22 +66,22 @@ class AbstractUserMeta(models.ModelBaseMeta):
                 for validator in value:
                     if not callable(validator):
                         raise ValueError(
-                            f"Items in REQUIRED_FIELDS mapping value for '{field_name}' must be a callable"
+                            f"Items in REQUIRED_FIELDS mapping value for '{field_name}' must be a callable validator"
                         )
-        return new_cls
+        return None
 
 
 class AbstractUser(AbstractBaseUser, metaclass=AbstractUserMeta):
     __abstract__ = True
 
-    username = sa.Column(
+    username: orm.Mapped[typing.Annotated[str, MaxLen(255)]] = orm.mapped_column(
         sa.Unicode(255),
         nullable=False,
-        default=None,
         unique=True,
-        doc="User username",
+        index=True,
+        doc="User's username",
     )
-    password = sa.Column(
+    password = orm.mapped_column(
         sa_utils.PasswordType(
             onload=lambda **kwargs: {
                 "schemes": list(settings.get("PASSWORD_SCHEMES", ["md5_crypt"])),
@@ -71,19 +89,25 @@ class AbstractUser(AbstractBaseUser, metaclass=AbstractUserMeta):
             }
         ),
         nullable=False,
-        doc="User password",
+        doc="User's password",
     )
-    is_active = sa.Column(sa.Boolean, default=True, doc="Is the user active?")
-    is_staff = sa.Column(sa.Boolean, default=False, doc="Is the user staff?")
-    is_admin = sa.Column(sa.Boolean, default=False, doc="Is the user admin?")
+    is_active: orm.Mapped[bool] = orm.mapped_column(
+        default=True, insert_default=True, doc="Is the user active?"
+    )
+    is_staff: orm.Mapped[bool] = orm.mapped_column(
+        default=False, insert_default=False, doc="Is the user staff?"
+    )
+    is_admin: orm.Mapped[bool] = orm.mapped_column(
+        default=False, insert_default=False, doc="Is the user admin?"
+    )
 
-    date_joined = sa.Column(
+    date_joined: orm.Mapped[datetime.datetime] = orm.mapped_column(
         sa.DateTime(timezone=True),
         default=timezone.now,
         nullable=False,
         doc="Date the user joined the system",
     )
-    updated_at = sa.Column(
+    updated_at: orm.Mapped[datetime.datetime] = orm.mapped_column(
         sa.DateTime(timezone=True),
         default=timezone.now,
         onupdate=timezone.now,

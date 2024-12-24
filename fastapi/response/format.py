@@ -151,7 +151,6 @@ def generic_response_data_formatter(
         return formatted.model_dump(mode="json")
 
     if is_formatted(response_data):
-        print("is formatted")
         return ResponseSchema(**response_data).model_dump(mode="json")
 
     message = response_data.get("message", None)
