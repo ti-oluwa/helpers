@@ -1,7 +1,7 @@
 from typing import Callable, Dict, Type, Optional
 import fastapi
 
-from .middlewares.core import apply_middlewares
+from .middlewares.core import apply_middleware
 from .dependencies import Dependency
 from .config import settings
 from helpers.generics.utils.module_loading import import_string
@@ -13,7 +13,7 @@ SetupFunc = Callable[[fastapi.FastAPI], fastapi.FastAPI]
 """Setup function - takes a (FastAPI) application and performs some post initialization setup on it"""
 
 SETUPS: Dict[SetupName, SetupFunc] = {
-    "apply_middlewares": apply_middlewares, # default middleware setup
+    "apply_middleware": apply_middleware, # default middleware setup
 }
 """Registered application setups"""
 
@@ -58,7 +58,7 @@ def default_dependencies():
     for dep_path in settings.DEFAULT_DEPENDENCIES:
         if not isinstance(dep_path, str):
             raise ValueError(
-                "Entry in DEFAULT_DEPENDENCIES must be a string path to the dependency"
+                "Entry in `DEFAULT_DEPENDENCIES` must be a string path to the dependency"
             )
         yield Dependency(import_string(dep_path))
 

@@ -53,7 +53,7 @@ def access_control(
     message: str = "Access Denied!",
     raise_access_denied: typing.Union[
         typing.Callable[[HTTPConnection, int, str], typing.NoReturn],
-        bool,
+        typing.Literal[False],
         None,
     ] = raise_access_denied,
     result_handler: typing.Optional[_ResultHandler[HTTPConnection]] = None,
@@ -114,7 +114,7 @@ def user_access_control(
     message: str = "Access Denied!",
     raise_access_denied: typing.Union[
         typing.Callable[[HTTPConnection, int, str], typing.NoReturn],
-        bool,
+        typing.Literal[False],
         None,
     ] = raise_access_denied,
     result_handler: typing.Optional[_ResultHandler[AbstractBaseUser]] = None,

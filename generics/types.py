@@ -1,10 +1,13 @@
-from typing import Union, Any, Callable, Optional
+import typing
 from types import MappingProxyType
 import copy
-
 import collections.abc
 
+
 from .typing import SupportsKeysAndGetItem
+
+
+_T = typing.TypeVar("_T")
 
 
 class MappingProxy(collections.abc.Mapping):
@@ -36,7 +39,7 @@ class MappingProxy(collections.abc.Mapping):
         mapping: SupportsKeysAndGetItem,
         *,
         recursive: bool = False,
-        copier: Optional[Callable] = copy.deepcopy,
+        copier: typing.Optional[typing.Callable[[_T], _T]] = copy.deepcopy,
     ) -> None:
         """
         Initialize the mapping proxy.
@@ -92,15 +95,15 @@ class MappingProxy(collections.abc.Mapping):
     def __setattr__(self, attr, value):
         raise RuntimeError(f"{type(self).__name__} instance cannot be modified")
 
-    def __getattr__(self, attr: Any) -> Union["MappingProxy", Any]:
+    def __getattr__(self, attr: typing.Any) -> typing.Union["MappingProxy", typing.Any]:
         try:
             return self._wrapped[attr]
         except KeyError as exc:
             raise AttributeError(exc) from exc
 
-    def __getitem__(self, key: Any) -> Union["MappingProxy", Any]:
+    def __getitem__(self, key: typing.Any) -> typing.Union["MappingProxy", typing.Any]:
         # The default collections.abc.Mapping behavior is to raise a TypeError
-        # If the key is not a string. In such cases, we need to use this class' 
+        # If the key is not a string. In such cases, we need to use this class'
         # __getattr__ method directly.
         try:
             return getattr(self, key)
@@ -108,11 +111,12 @@ class MappingProxy(collections.abc.Mapping):
             return self.__getattr__(key)
 
     def __repr__(self) -> str:
-        return f"{type(self).__name__}{repr(self._wrapped).removeprefix("mappingproxy")}"
+        return (
+            f"{type(self).__name__}{repr(self._wrapped).removeprefix("mappingproxy")}"
+        )
 
     def __iter__(self):
         return iter(self._wrapped)
 
     def __len__(self) -> int:
         return len(self._wrapped)
-

@@ -1,5 +1,5 @@
 
-from fastapi.responses import Response, JSONResponse
+from starlette.responses import Response, JSONResponse
 from typing import TypeVar
 
 from .shortcuts import * # noqa

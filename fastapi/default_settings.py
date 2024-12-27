@@ -15,7 +15,7 @@ TIMEZONE = "UTC"
 
 AUTH_USER_MODEL = None
 
-MIDDLEWARES = [
+MIDDLEWARE = [
     "helpers.fastapi.requests.middlewares.MaintenanceMiddleware",
     "helpers.fastapi.middlewares.core.AllowedHostsMiddleware",
     "helpers.fastapi.middlewares.core.AllowedIPsMiddleware",

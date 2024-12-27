@@ -1,4 +1,4 @@
-from typing import Coroutine, Dict, Any, Callable, Union
+from typing import Awaitable, Dict, Any, Callable, Union
 import json
 import copy
 import fastapi
@@ -6,7 +6,7 @@ import fastapi
 from . import _Response
 from .shortcuts import Status as ResponseStatus, Schema as ResponseSchema
 
-Formatter = Callable[[_Response], Union[_Response, Coroutine[Any, Any, _Response]]]
+Formatter = Callable[[_Response], Union[_Response, Awaitable[_Response]]]
 
 
 DEFAULT_ERROR_MSG = "An error occurred while processing your request!"

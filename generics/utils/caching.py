@@ -4,34 +4,42 @@ deps_required({"cachetools": "cachetools"})
 
 import functools
 import typing
+import threading
 from typing_extensions import ParamSpec
 from cachetools import TTLCache, TLRUCache
 import asyncio
+
+from helpers.generics.typing import Function, CoroutineFunction
 
 P = ParamSpec("P")
 R = typing.TypeVar("R")
 
 
-_CoroutineFunc = typing.Callable[P, typing.Coroutine[typing.Any, typing.Any, R]]
-_Func = typing.Callable[P, R]
-
-
 @typing.overload
 def ttl_cache(
-    func: _Func[P, R] = None, *, maxsize: int = 128, ttl: float = 3600
-) -> typing.Union[typing.Callable[[_Func[P, R]], _Func[P, R]], _Func[P, R]]: ...
-
-
-@typing.overload
-def ttl_cache(
-    func: _CoroutineFunc[P, R] = None, *, maxsize: int = 128, ttl: float = 3600
+    func: typing.Optional[Function[P, R]] = None,
+    *,
+    maxsize: int = 128,
+    ttl: float = 3600,
 ) -> typing.Union[
-    typing.Callable[[_CoroutineFunc[P, R]], _CoroutineFunc[P, R]], _CoroutineFunc[P, R]
+    typing.Callable[[Function[P, R]], Function[P, R]], Function[P, R]
+]: ...
+
+
+@typing.overload
+def ttl_cache(
+    func: typing.Optional[CoroutineFunction[P, R]] = None,
+    *,
+    maxsize: int = 128,
+    ttl: float = 3600,
+) -> typing.Union[
+    typing.Callable[[CoroutineFunction[P, R]], CoroutineFunction[P, R]],
+    CoroutineFunction[P, R],
 ]: ...
 
 
 def ttl_cache(
-    func: typing.Optional[typing.Union[_Func[P, R], _CoroutineFunc[P, R]]] = None,
+    func: typing.Optional[typing.Union[Function[P, R], CoroutineFunction[P, R]]] = None,
     *,
     maxsize: int = 128,
     ttl: float = 3600,
@@ -45,21 +53,25 @@ def ttl_cache(
     cache = TTLCache(maxsize=maxsize, ttl=ttl)
 
     def decorator(
-        func: typing.Union[_Func[P, R], _CoroutineFunc[P, R]],
-    ) -> typing.Union[_Func[P, R], _CoroutineFunc[P, R]]:
+        func: typing.Union[Function[P, R], CoroutineFunction[P, R]],
+    ) -> typing.Union[Function[P, R], CoroutineFunction[P, R]]:
         if asyncio.iscoroutinefunction(func):
+            lock = asyncio.Lock()
 
             async def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
                 key = (args, frozenset(kwargs.items()))
                 if key not in cache:
-                    cache[key] = await func(*args, **kwargs)
+                    async with lock:  # For thread safety
+                        cache[key] = await func(*args, **kwargs)
                 return cache[key]
         else:
+            lock = threading.Lock()
 
             def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
                 key = (args, frozenset(kwargs.items()))
                 if key not in cache:
-                    cache[key] = func(*args, **kwargs)
+                    with lock:  # For thread safety
+                        cache[key] = func(*args, **kwargs)
                 return cache[key]
 
         return functools.update_wrapper(wrapper, func)
@@ -71,20 +83,23 @@ def ttl_cache(
 
 @typing.overload
 def lru_cache(
-    func: _Func[P, R] = None, *, maxsize: int = 128
-) -> typing.Union[typing.Callable[[_Func[P, R]], _Func[P, R]], _Func[P, R]]: ...
+    func: typing.Optional[Function[P, R]] = None, *, maxsize: int = 128
+) -> typing.Union[
+    typing.Callable[[Function[P, R]], Function[P, R]], Function[P, R]
+]: ...
 
 
 @typing.overload
 def lru_cache(
-    func: _CoroutineFunc[P, R] = None, *, maxsize: int = 128
+    func: typing.Optional[CoroutineFunction[P, R]] = None, *, maxsize: int = 128
 ) -> typing.Union[
-    typing.Callable[[_CoroutineFunc[P, R]], _CoroutineFunc[P, R]], _CoroutineFunc[P, R]
+    typing.Callable[[CoroutineFunction[P, R]], CoroutineFunction[P, R]],
+    CoroutineFunction[P, R],
 ]: ...
 
 
 def lru_cache(
-    func: typing.Optional[typing.Union[_Func[P, R], _CoroutineFunc[P, R]]] = None,
+    func: typing.Optional[typing.Union[Function[P, R], CoroutineFunction[P, R]]] = None,
     *,
     maxsize: int = 128,
 ):
@@ -96,21 +111,25 @@ def lru_cache(
     cache = TLRUCache(maxsize=maxsize)
 
     def decorator(
-        func: typing.Union[_Func[P, R], _CoroutineFunc[P, R]],
-    ) -> typing.Union[_Func[P, R], _CoroutineFunc[P, R]]:
+        func: typing.Union[Function[P, R], CoroutineFunction[P, R]],
+    ) -> typing.Union[Function[P, R], CoroutineFunction[P, R]]:
         if asyncio.iscoroutinefunction(func):
+            lock = asyncio.Lock()
 
             async def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
                 key = (args, frozenset(kwargs.items()))
                 if key not in cache:
-                    cache[key] = await func(*args, **kwargs)
+                    async with lock:  # For thread safety
+                        cache[key] = await func(*args, **kwargs)
                 return cache[key]
         else:
+            lock = threading.Lock()
 
             def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
                 key = (args, frozenset(kwargs.items()))
                 if key not in cache:
-                    cache[key] = func(*args, **kwargs)
+                    with lock:  # For thread safety
+                        cache[key] = func(*args, **kwargs)
                 return cache[key]
 
         return functools.update_wrapper(wrapper, func)

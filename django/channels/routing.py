@@ -2,7 +2,7 @@ import typing
 from django.utils.module_loading import import_string
 from django.urls import URLPattern
 
-from .utils import apply_middleware, get_middleware
+from .utils import apply_middleware, get_middlewares
 
 
 def include(path: str, routes_name: str = "websocket_urlpatterns"):
@@ -10,8 +10,8 @@ def include(path: str, routes_name: str = "websocket_urlpatterns"):
     Adapted from Django's `include` function to import websocket routes from a module.
 
     :param path: The path to the module containing the routes.
-    :param routes_name: The name of the variable containing the routes.
-    :return: The URLRouter with the routes applied.
+    :param routes_name: The name of the variable containing the routes in the module.
+    :return: A URLRouter with the routes applied.
     """
     from channels.routing import URLRouter
 
@@ -25,12 +25,12 @@ def include(path: str, routes_name: str = "websocket_urlpatterns"):
 
 def get_application(routes: typing.List[URLPattern]):
     """
-    Returns the application with the routes and middleware applied.
+    Returns the application/router with the routes and middleware applied.
 
     :param routes: The routes to be applied to the application.
     """
     from channels.routing import URLRouter
 
     router = URLRouter(routes)
-    router = apply_middleware(router, get_middleware())
+    router = apply_middleware(router, get_middlewares())
     return router

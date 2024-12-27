@@ -2,7 +2,7 @@ import functools
 import math
 import re
 import typing
-from typing_extensions import Unpack, ParamSpec
+from typing_extensions import Unpack
 import uuid
 from contextlib import asynccontextmanager
 import redis.asyncio as async_pyredis
@@ -11,14 +11,9 @@ import fastapi
 from starlette.requests import HTTPConnection
 from starlette.status import HTTP_429_TOO_MANY_REQUESTS
 
+from helpers.generics.typing import Function, CoroutineFunction
 from helpers.fastapi.utils.requests import get_ip_address
 
-
-_P = ParamSpec("_P")
-_R = typing.TypeVar("_R")
-
-Function = typing.Callable[_P, _R]
-CoroutineFunction = typing.Callable[_P, typing.Coroutine[typing.Any, typing.Any, _R]]
 
 _HTTPConnection = typing.TypeVar("_HTTPConnection", bound=HTTPConnection)
 ConnectionIdentifier = typing.Union[
