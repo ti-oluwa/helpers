@@ -1,4 +1,5 @@
 import typing
+from typing_extensions import ParamSpec
 
 
 class SupportsRichComparison(typing.Protocol):
@@ -14,3 +15,10 @@ class SupportsKeysAndGetItem(typing.Protocol):
     def __getitem__(self, name: typing.Any) -> typing.Any: ...
 
     def keys(self) -> typing.Iterable[typing.Any]: ...
+
+
+_P = ParamSpec("_P")
+_R = typing.TypeVar("_R")
+
+Function = typing.Callable[_P, _R]
+CoroutineFunction = typing.Callable[_P, typing.Awaitable[_R]]

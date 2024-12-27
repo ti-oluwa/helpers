@@ -1,4 +1,5 @@
 import inspect
+import typing
 import fastapi
 import re
 
@@ -71,8 +72,10 @@ async def HostBlacklistMiddleware(request: fastapi.Request, call_next):
     :param call_next: Next middleware in the chain
     """
     hostname = request.url.hostname
-    blacklisted_hosts = getattr(settings, "BLACKLISTED_HOSTS", [])
-    if not (blacklisted_hosts and hostname):
+    blacklisted_hosts: typing.Optional[typing.List[str]] = getattr(
+        settings, "BLACKLISTED_HOSTS", None
+    )
+    if not blacklisted_hosts or not hostname:
         response = await call_next(request)
         return response
 
@@ -91,7 +94,9 @@ async def IPBlacklistMiddleware(request: fastapi.Request, call_next):
     :param request: FastAPI request object
     :param call_next: Next middleware in the chain
     """
-    blacklisted_ips = getattr(settings, "BLACKLISTED_IPS", [])
+    blacklisted_ips: typing.Optional[typing.List[str]] = getattr(
+        settings, "BLACKLISTED_IPS", None
+    )
     if not blacklisted_ips:
         response = await call_next(request)
         return response
@@ -107,13 +112,13 @@ async def IPBlacklistMiddleware(request: fastapi.Request, call_next):
 
 def middlewares():
     """
-    Yield all middlewares defined in the settings.
+    Yield all middleware defined in the settings.
     """
-    middlewares = settings.get("MIDDLEWARES", [])
-    if not middlewares:
+    middleware: typing.Optional[typing.List[str]] = settings.get("MIDDLEWARE", None)
+    if not middleware:
         return
 
-    for middleware_path in reversed(middlewares):
+    for middleware_path in reversed(middleware):
         if isinstance(middleware_path, str):
             middleware = import_string(middleware_path)
 
@@ -122,9 +127,9 @@ def middlewares():
         yield middleware
 
 
-def apply_middlewares(app: fastapi.FastAPI) -> fastapi.FastAPI:
+def apply_middleware(app: fastapi.FastAPI) -> fastapi.FastAPI:
     """
-    Apply all middlewares to the FastAPI app.
+    Apply all middleware to the FastAPI app.
     """
     for middleware in middlewares():
         if inspect.isclass(middleware):

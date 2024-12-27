@@ -4,7 +4,7 @@ from django.utils.module_loading import import_string
 from helpers.django.channels import channels_settings
 
 
-def get_middleware() -> typing.List[str]:
+def get_middlewares() -> typing.List[str]:
     """Returns the list of middlewares defined in the helpers settings"""
     middlewares: typing.List[str] = channels_settings.MIDDLEWARE
     return middlewares

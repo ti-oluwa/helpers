@@ -17,30 +17,29 @@ class ModelDataCleanerMeta(type):
         return new_class
 
     @classmethod
-    def run_checks(cls, new_class) -> Literal[True]:
+    def run_checks(meta_cls, new_class) -> None:
         """Run all checks on the class."""
 
         def attr_is_check(attr_name: str, attr_value: Any):
             return attr_name.startswith("check") and callable(attr_value)
 
-        checks = [
-            attr
-            for attr in dir(cls)
-            if not attr.startswith("__") and attr_is_check(attr, getattr(cls, attr))
-        ]
-        for check in checks:
-            getattr(new_class, check)()
-        return True
+        for attr_name in dir(meta_cls):
+            attr_value = getattr(meta_cls, attr_name)
+            if not attr_name.startswith("__") and attr_is_check(attr_name, attr_value):
+                attr_value(new_class)
+        return
 
-    def check_model(cls):
+    @staticmethod
+    def check_model(cls) -> None:
         """Check if the model attribute is set and is a subclass of `django.db.models.Model`."""
         if not issubclass(cls.model, models.Model):
             raise ValueError(
                 "`model` attribute must be a subclass of `django.db.models.Model`"
             )
-        return True
+        return
 
-    def check_exclude(cls):
+    @staticmethod
+    def check_exclude(cls) -> None:
         """Check if the exclude attribute is set and is a list of strings."""
         if not isinstance(cls.exclude, List):
             raise ValueError("`exclude` attribute must be a list of strings")
@@ -54,9 +53,10 @@ class ModelDataCleanerMeta(type):
                 raise ValueError(
                     f"Field `{field}` not found in model `{cls.model.__name__}` fields"
                 )
-        return True
+        return
 
-    def check_key_mappings(cls):
+    @staticmethod
+    def check_key_mappings(cls) -> None:
         """Check if the key_mappings attribute is set and is a dictionary of strings."""
         if not isinstance(cls.key_mappings, Dict):
             raise ValueError("`key_mappings` attribute must be a dictionary")
@@ -65,9 +65,10 @@ class ModelDataCleanerMeta(type):
                 raise ValueError(
                     "`key_mappings` attribute must be a dictionary of strings"
                 )
-        return True
+        return
 
-    def check_parsers(cls):
+    @staticmethod
+    def check_parsers(cls) -> None:
         """Check if the parsers attribute is set and is a dictionary of iterables of callables."""
         if not isinstance(cls.parsers, Dict):
             raise ValueError("`parsers` attribute must be a dictionary")
@@ -79,13 +80,14 @@ class ModelDataCleanerMeta(type):
             for parser in parsers:
                 if not callable(parser):
                     raise ValueError("Parsers must be callable")
-        return True
+        return
 
-    def check_clean_strings(cls):
+    @staticmethod
+    def check_clean_strings(cls) -> None:
         """Check if the clean_strings attribute is set and is a boolean."""
         if not isinstance(cls.clean_strings, bool):
             raise ValueError("`clean_strings` attribute must be a boolean")
-        return True
+        return
 
 
 class ModelDataCleaner(Generic[_Model], metaclass=ModelDataCleanerMeta):

@@ -1,13 +1,16 @@
 from __future__ import annotations
 
+import enum
 import functools
 import inspect
 from typing import Any, Optional, TypeVar, Union, List, Generic, Type, Callable
+from typing_extensions import ParamSpec
 from django.db import models
 from django.core.exceptions import ImproperlyConfigured
 
 
 M = TypeVar("M", bound=models.Model)
+P = ParamSpec("P")
 QS = TypeVar("QS", bound=models.QuerySet)
 BaseManager = TypeVar("BaseManager", bound=models.manager.BaseManager)
 
@@ -70,7 +73,14 @@ class BaseSearchableManager(Generic[SQS], models.manager.BaseManager):
         return self.get_queryset().search(query=query, fields=fields)
 
 
-def eager_fetch_decorator(*fields, eager_fetch_method: str):
+class EagerFetchMethod(enum.StrEnum):
+    """Enumeration of eager fetch methods"""
+
+    SELECT_RELATED = "select_related"
+    PREFETCH_RELATED = "prefetch_related"
+
+
+def eager_fetch_decorator(*fields, eager_fetch_method: EagerFetchMethod):
     """
     Automatically applies the defined eager fetch method to the queryset or manager class or method.
 
@@ -78,11 +88,14 @@ def eager_fetch_decorator(*fields, eager_fetch_method: str):
     :param eager_fetch_method: Name of method for eager fetching model fields.
     :return: The decorated queryset or manager class or method.
     """
+    eager_fetch_method = EagerFetchMethod(eager_fetch_method)
 
-    def qs_method_decorator(qs_method: Callable[..., QS]):  # -> Callable[..., QS]:
+    def qs_method_decorator(qs_method: Callable[P, QS]) -> Callable[P, QS]:
         @functools.wraps(qs_method)
-        def wrapper(*args, **kwargs) -> QS:
-            return getattr(qs_method(*args, **kwargs), eager_fetch_method)(*fields)
+        def wrapper(*args: P.args, **kwargs: P.kwargs) -> QS:
+            return getattr(qs_method(*args, **kwargs), eager_fetch_method.value)(
+                *fields
+            )
 
         return wrapper
 
@@ -99,8 +112,8 @@ def eager_fetch_decorator(*fields, eager_fetch_method: str):
         return cls
 
     def obj_decorator(
-        obj: Union[Type[QS], Type[BaseManager], Callable[..., QS]],
-    ) -> Union[Type[QS], Type[BaseManager], Callable[..., QS]]:
+        obj: Union[Type[QS], Type[BaseManager], Callable[P, QS]],
+    ) -> Union[Type[QS], Type[BaseManager], Callable[P, QS]]:
         if inspect.isclass(obj):
             return cls_decorator(obj)
         return qs_method_decorator(obj)
@@ -109,7 +122,8 @@ def eager_fetch_decorator(*fields, eager_fetch_method: str):
 
 
 auto_prefetch = functools.partial(
-    eager_fetch_decorator, eager_fetch_method="prefetch_related"
+    eager_fetch_decorator,
+    eager_fetch_method=EagerFetchMethod.PREFETCH_RELATED,
 )
 """
 #### USE WITH CAUTION! ####
@@ -147,7 +161,8 @@ class MyModelQuerySet(models.QuerySet):
 """
 
 auto_select = functools.partial(
-    eager_fetch_decorator, eager_fetch_method="select_related"
+    eager_fetch_decorator,
+    eager_fetch_method=EagerFetchMethod.SELECT_RELATED,
 )
 """
 #### USE WITH CAUTION! ####

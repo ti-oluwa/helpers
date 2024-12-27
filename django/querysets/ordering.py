@@ -103,7 +103,7 @@ class QSOrderer(Generic[M]):
         when calling the `order_by`.
         """
 
-        def decorator(func: Callable):
+        def decorator(func: Callable[[models.QuerySet[M], bool], models.QuerySet[M]]):
             # If an instance of the class calls the register method,
             # the orderer is added to the instance's orderers dictionary
             if isinstance(cls, QSOrderer):

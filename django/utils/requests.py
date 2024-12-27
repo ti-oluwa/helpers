@@ -5,7 +5,7 @@ from ipaddress import ip_address
 from django.http import HttpRequest
 
 
-def get_ip_address(request):
+def get_ip_address(request: HttpRequest):
     """Get the requestor's IP address form the Django request object"""
     if not hasattr(request, "META"):
         raise ValueError("Request object must have a 'META' attribute")

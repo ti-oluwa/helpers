@@ -34,6 +34,11 @@ def type_implements_iter(tp: Type[Any], /) -> bool:
     return has_method(tp, "__iter__")
 
 
+def is_mapping(obj: Any) -> bool:
+    """Check if an object is a mapping (like dict)."""
+    return isinstance(obj, collections.abc.Mapping)
+
+
 def is_mapping_type(tp: Type[Any], /) -> bool:
     """Check if a given type is a mapping (like dict)."""
     return isinstance(tp, type) and issubclass(tp, collections.abc.Mapping)
@@ -61,9 +66,9 @@ def is_iterable_type(
     return is_iter_type
 
 
-def is_iterable(obj: Any) -> bool:
+def is_iterable(obj: Any, *, exclude: Optional[Tuple[Type[Any]]] = None) -> bool:
     """Check if an object is an iterable."""
-    return isinstance(obj, collections.abc.Iterable)
+    return is_iterable_type(type(obj), exclude=exclude)
 
 
 def is_generic_type(tp: Type[Any]) -> bool:
@@ -281,6 +286,7 @@ def merge_mappings(
         copier=copier,
     )
 
+
 _default_mappings_merger = functools.partial(merge_mappings, copier=None)
 
 
@@ -295,6 +301,7 @@ def merge_dicts(
     Deprecated: Use `merge_mappings` instead.
     """
     return merge_mappings(*dicts, **kwargs)
+
 
 def merge_enums(name, *enums) -> ExtendedEnum:
     """
