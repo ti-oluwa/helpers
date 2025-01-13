@@ -3,8 +3,10 @@ import typing
 from datetime import date, datetime
 import zoneinfo
 import attrs
+import cattrs
 
-from helpers.generics.utils.time import timeit
+from helpers.generics.utils.profiling import timeit
+from helpers.generics.attrs import type_cast
 from .mock_data import course_data, student_data, year_data
 from dateutil.parser import parse
 
@@ -12,7 +14,9 @@ from dateutil.parser import parse
 # DATA CLASSES #
 ################
 
+converter = cattrs.Converter()
 
+@type_cast(converter)
 @attrs.define(kw_only=True, auto_attribs=True)
 class AcademicYear:
     """Academic year data class"""
@@ -31,6 +35,7 @@ class AcademicYear:
     created_at: datetime = attrs.field(factory=datetime.now)
 
 
+@type_cast(converter)
 @attrs.define(kw_only=True, auto_attribs=True)
 class Course:
     """Course data class"""
@@ -47,6 +52,7 @@ class Course:
     created_at: datetime = attrs.field(factory=datetime.now)
 
 
+@type_cast(converter)
 @attrs.define(kw_only=True, auto_attribs=True)
 class Student:
     """Student data class with multiple fields and a list of enrolled courses"""
@@ -83,7 +89,7 @@ def example():
 
     years = load_data(year_data, AcademicYear)
     courses = load_data(course_data, Course)
-    students = load_data(student_data, Student)
+    # students = load_data(student_data, Student)
 
     # for student in students:
     #     log(attrs.asdict(student))
@@ -96,7 +102,6 @@ def example():
     # for year in years:
     #     log(attrs.asdict(year))
     #     log("\n")
-
 
 @timeit("attrs_test")
 def test(n: int):

@@ -10,7 +10,7 @@ from helpers.fastapi.config import settings
 from helpers.fastapi.utils.requests import get_ip_address
 
 
-class TimeBasedOTP(mixins.TimestampMixin, mixins.UUIDPrimaryKeyMixin, models.Model):
+class TimeBasedOTP(mixins.TimestampMixin, mixins.UUID7PrimaryKeyMixin, models.Model):
     """Model representing a time-based one-time password."""
 
     __abstract__ = True

@@ -17,10 +17,10 @@ R = typing.TypeVar("R")
 
 @typing.overload
 def ttl_cache(
-    func: typing.Optional[Function[P, R]] = None,
+    func: typing.Optional[Function[P, R]] = ...,
     *,
-    maxsize: int = 128,
-    ttl: float = 3600,
+    maxsize: int = ...,
+    ttl: float = ...,
 ) -> typing.Union[
     typing.Callable[[Function[P, R]], Function[P, R]], Function[P, R]
 ]: ...
@@ -28,10 +28,10 @@ def ttl_cache(
 
 @typing.overload
 def ttl_cache(
-    func: typing.Optional[CoroutineFunction[P, R]] = None,
+    func: typing.Optional[CoroutineFunction[P, R]] = ...,
     *,
-    maxsize: int = 128,
-    ttl: float = 3600,
+    maxsize: int = ...,
+    ttl: float = ...,
 ) -> typing.Union[
     typing.Callable[[CoroutineFunction[P, R]], CoroutineFunction[P, R]],
     CoroutineFunction[P, R],
@@ -83,7 +83,10 @@ def ttl_cache(
 
 @typing.overload
 def lru_cache(
-    func: typing.Optional[Function[P, R]] = None, *, maxsize: int = 128
+    func: typing.Optional[Function[P, R]] = ...,
+    *,
+    maxsize: int = ...,
+    ttu: float = ...,
 ) -> typing.Union[
     typing.Callable[[Function[P, R]], Function[P, R]], Function[P, R]
 ]: ...
@@ -91,7 +94,10 @@ def lru_cache(
 
 @typing.overload
 def lru_cache(
-    func: typing.Optional[CoroutineFunction[P, R]] = None, *, maxsize: int = 128
+    func: typing.Optional[CoroutineFunction[P, R]] = ...,
+    *,
+    maxsize: int = ...,
+    ttu: float = ...,
 ) -> typing.Union[
     typing.Callable[[CoroutineFunction[P, R]], CoroutineFunction[P, R]],
     CoroutineFunction[P, R],
@@ -102,13 +108,14 @@ def lru_cache(
     func: typing.Optional[typing.Union[Function[P, R], CoroutineFunction[P, R]]] = None,
     *,
     maxsize: int = 128,
+    ttu: float = 3600,
 ):
     """
     Least Recently Used (LRU) cache decorator supporting both sync and async functions.
 
     :param maxsize: The maximum size of the cache.
     """
-    cache = TLRUCache(maxsize=maxsize)
+    cache = TLRUCache(maxsize=maxsize, ttu=ttu)
 
     def decorator(
         func: typing.Union[Function[P, R], CoroutineFunction[P, R]],

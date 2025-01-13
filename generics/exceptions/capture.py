@@ -744,6 +744,8 @@ class ExceptionCaptor(
         return
 
     def __enter__(self):
+        if not self.response_type:
+            raise RuntimeError("response_type must be set before using as context manager")
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
@@ -754,6 +756,8 @@ class ExceptionCaptor(
         return False
 
     async def __aenter__(self):
+        if not self.response_type:
+            raise RuntimeError("response_type must be set before using as context manager")
         return self
 
     async def __aexit__(self, exc_type, exc_value, traceback):
