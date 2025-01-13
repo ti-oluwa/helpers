@@ -7,7 +7,7 @@ from starlette.exceptions import HTTPException
 from . import shortcuts
 
 
-def generic_exception_handler(connection: HTTPConnection, exc: Exception) -> Response:
+async def generic_exception_handler(connection: HTTPConnection, exc: Exception) -> Response:
     """Prepares and returns a properly formatted response for any exception."""
     return shortcuts.error(
         status_code=500,
@@ -15,14 +15,14 @@ def generic_exception_handler(connection: HTTPConnection, exc: Exception) -> Res
     )
 
 
-def validation_exception_handler(
+async def validation_exception_handler(
     connection: HTTPConnection, exc: ValidationException
 ) -> Response:
     """Prepares and returns a properly formatted response for a `fastapi.ValidationException`."""
     return shortcuts.validation_error(errors=exc.errors())
 
 
-def http_exception_handler(connection: HTTPConnection, exc: HTTPException) -> Response:
+async def http_exception_handler(connection: HTTPConnection, exc: HTTPException) -> Response:
     """Prepares and returns a properly formatted response for a `starlette.HTTPException`."""
     return shortcuts.error(
         status_code=exc.status_code,
@@ -31,14 +31,14 @@ def http_exception_handler(connection: HTTPConnection, exc: HTTPException) -> Re
     )
 
 
-def pydantic_validation_error_handler(
+async def pydantic_validation_error_handler(
     connection: HTTPConnection, exc: pydantic.ValidationError
 ) -> Response:
     """Prepares and returns a properly formatted response for a `pydantic.ValidationError`."""
     return shortcuts.unprocessable_entity(errors=exc.errors())
 
 
-def request_validation_error_handler(
+async def request_validation_error_handler(
     connection: HTTPConnection, exc: RequestValidationError
 ) -> Response:
     """Prepares and returns a properly formatted response for a `fastapi.RequestValidationError`."""

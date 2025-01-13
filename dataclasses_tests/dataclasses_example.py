@@ -1,10 +1,9 @@
 # Import necessary packages and modules
 import typing
-import zoneinfo
 from datetime import datetime
 
-from helpers.generics.data_utils import dataclasses as dc
-from helpers.generics.utils.time import timeit
+from ..generics.data_utils import dataclasses as dc
+from ..generics.utils.profiling import timeit
 from .mock_data import course_data, student_data, year_data
 
 
@@ -16,8 +15,8 @@ class AcademicYear(dc.DataClass):
 
     id = dc.Field(int, required=True)
     name = dc.StringField(max_length=100)
-    start_date = dc.DateField()
-    end_date = dc.DateField()
+    start_date = dc.DateField(input_formats=["%d-%m-%Y", "%d/%m/%Y"])
+    end_date = dc.DateField(input_formats=["%d-%m-%Y", "%d/%m/%Y"])
     created_at = dc.DateTimeField(default=datetime.now)
 
 
@@ -27,7 +26,7 @@ class Course(dc.DataClass):
     id = dc.Field(int, required=True)  # Alternative: dc.IntegerField(...)
     name = dc.StringField(max_length=100)
     code = dc.StringField(max_length=20)
-    year = dc.Field(AcademicYear)  # Alternative: AcademicYear(...)
+    year = dc.Field(AcademicYear, lazy=True)  # Alternative: AcademicYear(...)
     created_at = dc.DateTimeField(default=datetime.now)
 
 
@@ -37,20 +36,18 @@ class Student(dc.DataClass):
     id = dc.IntegerField(required=True)
     name = dc.StringField(max_length=100)
     age = dc.IntegerField(min_value=18, max_value=100)
-    email = dc.EmailField(allow_null=True, required=False, default=None)
-    phone = dc.StringField(allow_null=True, required=False, default=None)
-    year = AcademicYear()
-    courses = dc.ListField(Course())
-    joined_at = dc.DateTimeField(allow_null=True, tz=zoneinfo.ZoneInfo("Africa/Lagos"))
-    created_at = dc.DateTimeField(
-        default=datetime.now, tz=zoneinfo.ZoneInfo("Africa/Lagos")
-    )
+    email = dc.EmailField(allow_null=True, default=None)
+    phone = dc.StringField(allow_null=True, default=None)
+    year = AcademicYear(lazy=True)
+    courses = dc.ListField(child=Course(lazy=True), lazy=True)
+    joined_at = dc.DateTimeField(allow_null=True, tz="Africa/Lagos")
+    created_at = dc.DateTimeField(default=datetime.now, tz="Africa/Lagos")
 
 
 def load_data(
     data_list: typing.List[typing.Dict[str, typing.Any]],
-    datacls: typing.Type[dc._DataClass],
-) -> typing.List[dc._DataClass]:
+    datacls: typing.Type[dc._DataClass_co],
+) -> typing.List[dc._DataClass_co]:
     """
     Load data into data classes
 

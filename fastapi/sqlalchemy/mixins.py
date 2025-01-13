@@ -1,9 +1,16 @@
 import datetime
+import typing
 import uuid
 import sqlalchemy as sa
 from sqlalchemy import orm
 
 from helpers.fastapi.utils import timezone
+
+
+def uuid7(as_type: typing.Optional[typing.Union[str, type]] = uuid.UUID) -> uuid.UUID:
+    from uuid_extensions import uuid7
+
+    return uuid7(as_type=as_type)
 
 
 @orm.declarative_mixin
@@ -37,3 +44,15 @@ class UUIDPrimaryKeyMixin:
         doc="The primary key of the model",
     )
 
+
+@orm.declarative_mixin
+class UUID7PrimaryKeyMixin:
+    """Adds a UUID Field, `id`, as the primary key of the database model"""
+
+    id: orm.Mapped[uuid.UUID] = orm.mapped_column(
+        sa.UUID,
+        primary_key=True,
+        index=True,
+        default=uuid7,
+        doc="The primary key of the model",
+    )

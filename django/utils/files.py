@@ -4,163 +4,25 @@ import imghdr
 import os
 from io import BytesIO
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, TypeVar, Union, Tuple, Coroutine
+import typing
+import asyncio
 from django.core.files import File as DjangoFile
 from django.core.files.uploadedfile import InMemoryUploadedFile
-import httpx
-import asyncio
 from asgiref.sync import sync_to_async
 
-from helpers.generics.utils.caching import ttl_cache, async_ttl_cache
+from helpers.generics.utils.downloads import download, async_download
 
 
-T = TypeVar("T")
-DownloadHandler = Callable[[httpx.Response], T]
-AsyncDownloadHandler = Callable[[httpx.Response], Coroutine[Any, Any, T]]
-_File = Union[str, bytes, BytesIO, DjangoFile]
+class Response(typing.Protocol):
+    """Interface for a response object"""
+
+    content: bytes
+    headers: typing.Mapping[str, str]
+    url: str
+    charset_encoding: str
 
 
-def download(
-    url: str,
-    handler: Optional[DownloadHandler] = None,
-    timeout: Optional[float] = None,
-    request_kwargs: Optional[Dict[str, Any]] = None,
-    cache_for: float = 300.0,
-) -> T:
-    """
-    Download content from a URL and process it using a handler function.
-
-    Uses the httpx library to make the request.
-
-    :param url: The URL to download the file from.
-    :param handler: The handler function to process the download response.
-    If not provided, the raw content is returned.
-    :param timeout: The timeout for the request.
-    :param request_kwargs: Additional keyword arguments to pass to the request.
-    :return: The result of the handler function if provided, otherwise the raw content.
-    """
-    if cache_for:
-        return ttl_cache(download, ttl=cache_for)(
-            url, handler, timeout, request_kwargs, 0
-        )
-
-    request_kwargs = request_kwargs or {}
-    request_kwargs.pop("timeout", None)
-    httpx_timeout = httpx.Timeout(timeout, connect=timeout)
-    with httpx.Client(timeout=httpx_timeout, **request_kwargs) as client:
-        response = client.get(url)
-        response.raise_for_status()
-        if not handler:
-            return response.content
-        return handler(response)
-
-
-async def async_download(
-    url: str,
-    handler: Optional[AsyncDownloadHandler] = None,
-    timeout: Optional[float] = None,
-    request_kwargs: Optional[Dict[str, Any]] = None,
-    cache_for: float = 300.0,
-) -> T:
-    """
-    Download content from a URL asynchronously and process it using a handler function.
-
-    Uses the httpx library to make the request.
-
-    :param url: The URL to download the file from.
-    :param handler: Async handler function to process the download response.
-    If not provided, the raw content is returned.
-    :param timeout: The timeout for the request.
-    :param request_kwargs: Additional keyword arguments to pass to the request.
-    :return: The result of the handler function if provided, otherwise the raw content.
-    """
-    if cache_for:
-        return await async_ttl_cache(async_download, ttl=cache_for)(
-            url, handler, timeout, request_kwargs, 0
-        )
-
-    request_kwargs = request_kwargs or {}
-    request_kwargs.pop("timeout", None)
-    httpx_timeout = httpx.Timeout(timeout, connect=timeout)
-    async with httpx.AsyncClient(timeout=httpx_timeout, **request_kwargs) as client:
-        response = await client.get(url)
-        response.raise_for_status()
-        if not handler:
-            return response.content
-        return await handler(response)
-
-
-def multi_download(
-    urls: Dict[str, Union[str, Tuple[str, DownloadHandler]]],
-    default_handler: Optional[DownloadHandler] = None,
-    timeout: int = None,
-    request_kwargs: Optional[Dict[str, Any]] = None,
-) -> Dict[str, T]:
-    """
-    Download content from multiple URLs and process them using a handler function.
-
-    Uses the httpx library to make the requests.
-
-    :param urls: A dictionary of URLs to download the files from.
-    The keys are the names of the files and the values are the URLs
-    or a tuple of URL and handler function.
-    :param default_handler: The default handler function to process the download response.
-    :param timeout: The timeout for the requests.
-    :param request_kwargs: Additional keyword arguments to pass to the requests.
-    :return: A mapping of the names of the files to the results of the handler functions, or raw content.
-    """
-    results = {}
-    for name, url in urls.items():
-        handler = default_handler
-        if isinstance(url, tuple):
-            url, handler = url
-        results[name] = download(url, handler, timeout, request_kwargs)
-    return results
-
-
-def fast_multi_download(
-    urls: Dict[str, Union[str, Tuple[str, DownloadHandler]]],
-    default_handler: Optional[DownloadHandler] = None,
-    timeout: Optional[float] = None,
-    request_kwargs: Optional[Dict[str, Any]] = None,
-) -> Dict[str, T]:
-    """
-    Download content from multiple URLs concurrently
-    and process them using a handler function.
-
-    Uses the httpx library to make the requests.
-
-    :param urls: A dictionary of URLs to download the files from.
-    The keys are the names of the files and the values are the URLs
-    or a tuple of URL and handler function.
-    :param default_handler: The default handler function to process the download response.
-    :param timeout: The timeout for the requests.
-    :param request_kwargs: Additional keyword arguments to pass to the requests.
-    :return: A mapping of the names of the files to the results of the handler functions, or raw content.
-    """
-    if default_handler and not asyncio.iscoroutinefunction(default_handler):
-        default_handler = sync_to_async(default_handler)
-
-    async def download_and_handle(url, handler):
-        if handler and not asyncio.iscoroutinefunction(handler):
-            handler = sync_to_async(handler)
-        return await async_download(url, handler, timeout, request_kwargs)
-
-    async def download_all():
-        tasks = []
-        for _, url in urls.items():
-            handler = default_handler
-            if isinstance(url, tuple):
-                url, handler = url
-
-            tasks.append(download_and_handle(url, handler))
-        return await asyncio.gather(*tasks)
-
-    results = asyncio.run(download_all())
-    return dict(zip(urls.keys(), results))
-
-
-def response_to_in_memory_file(response: httpx.Response) -> InMemoryUploadedFile:
+def response_to_in_memory_file(response: Response) -> InMemoryUploadedFile:
     """Download response handler. Returns response content as an `InMemoryUploadedFile`"""
     url = response.url
     content_type = response.headers.get("Content-Type", "application/octet-stream")
@@ -177,17 +39,13 @@ def response_to_in_memory_file(response: httpx.Response) -> InMemoryUploadedFile
     )
 
 
-async_response_to_in_memory_file = sync_to_async(response_to_in_memory_file)
+download_file = functools.partial(download, handler=response_to_in_memory_file)
+"""Download url content as an `InMemoryUploadedFile`"""
 
-download_as_in_memory_file = functools.partial(
-    download, handler=response_to_in_memory_file
+async_download_file = functools.partial(
+    async_download, handler=sync_to_async(response_to_in_memory_file)
 )
-"""`download` function with response returned as an `InMemoryUploadedFile`"""
-
-async_download_as_in_memory_file = functools.partial(
-    async_download, handler=async_response_to_in_memory_file
-)
-"""`async_download` function with response returned as an `InMemoryUploadedFile`"""
+"""Download url content as an `InMemoryUploadedFile`"""
 
 
 IMAGE_EXTENSIONS = ("jpg", "jpeg", "png", "gif", "bmp", "webp", "tiff", "svg", "ico")
@@ -195,7 +53,7 @@ VIDEO_EXTENSIONS = ("mp4", "webm", "mkv", "flv", "avi", "mov", "wmv", "mpg", "mp
 AUDIO_EXTENSIONS = ("mp3", "wav", "ogg", "flac", "aac", "wma", "m4a", "opus")
 
 
-def infer_file_type(file: Union[str, DjangoFile]) -> str:
+def infer_file_type(file: typing.Union[str, DjangoFile]) -> str:
     """
     Infers the type of a file (video, image, audio, ...) based on its content or extension.
 
@@ -246,8 +104,8 @@ def infer_file_type_from_extension(file: str):
 
 
 def find_files_by_extension(
-    directory: str, extensions: Tuple[str, ...], search_sub_dirs: bool = False
-) -> Dict[str, List[Path]]:
+    directory: str, extensions: typing.Iterable[str], search_sub_dirs: bool = False
+) -> typing.Dict[str, typing.List[Path]]:
     """
     Finds all files with specified extensions in a directory.
     Groups files found by extension.
@@ -275,9 +133,9 @@ def find_files_by_extension(
     return files
 
 
-def path_to_in_memory_file(path: Union[Path, str]) -> InMemoryUploadedFile:
+def load_file_to_memory(path: typing.Union[Path, str]) -> InMemoryUploadedFile:
     """
-    Converts a file path to an `InMemoryUploadedFile`.
+    Loads a file from disk into memory as an `InMemoryUploadedFile`.
 
     :param path: The path to the file.
 
@@ -295,20 +153,39 @@ def path_to_in_memory_file(path: Union[Path, str]) -> InMemoryUploadedFile:
         )
 
 
-def paths_to_in_memory_files(paths: List[Path]) -> List[InMemoryUploadedFile]:
+def load_files_to_memory(
+    paths: typing.List[typing.Union[Path, str]],
+) -> typing.List[InMemoryUploadedFile]:
+    """
+    Loads multiple files from disk into memory as `InMemoryUploadedFile` objects.
+
+    :param paths: A list of paths to the files.
+    :return: A list of `InMemoryUploadedFile` objects.
+    """
     if not paths:
         return []
 
-    # If there's only one path, there's no need to run the async function
+    # If there's only one path, there's no need to run async code
     if len(paths) == 1:
-        return [path_to_in_memory_file(paths[0])]
+        return [load_file_to_memory(paths[0])]
 
     async def main():
-        async_path_to_in_memory_file = sync_to_async(path_to_in_memory_file)
+        async_load_file = sync_to_async(load_file_to_memory)
         tasks = []
         for path in paths:
-            task = asyncio.create_task(async_path_to_in_memory_file(path))
+            task = asyncio.create_task(async_load_file(path))
             tasks.append(task)
         return await asyncio.gather(*tasks)
 
-    return asyncio.run(main())
+    return list(asyncio.run(main()))
+
+
+__all__ = [
+    "download_file",
+    "async_download_file",
+    "infer_file_type",
+    "infer_file_type_from_extension",
+    "find_files_by_extension",
+    "load_file_to_memory",
+    "load_files_to_memory",
+]
