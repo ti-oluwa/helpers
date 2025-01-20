@@ -118,7 +118,7 @@ class Field(typing.Generic[_T], metaclass=FieldMeta):
 
     def __init__(
         self,
-        _type: typing.Type[_T],
+        type_: typing.Type[_T],
         *,
         alias: typing.Optional[str] = None,
         allow_null: bool = False,
@@ -133,7 +133,7 @@ class Field(typing.Generic[_T], metaclass=FieldMeta):
         """
         Initialize the field.
 
-        :param _type: The expected type for field values.
+        :param type_: The expected type for field values.
         :param alias: Optional string for alternative field naming, defaults to None.
         :param allow_null: If True, permits None values, defaults to False.
         :param allow_blank: If True, permits blank values, defaults to True.
@@ -145,10 +145,10 @@ class Field(typing.Generic[_T], metaclass=FieldMeta):
         :param onsetvalue: Callable to run on the value before setting it, defaults to None.
             Use this to modify the value before it is validated and set on the instance.
         """
-        if not self._object_is_type(_type):
-            raise TypeError(f"Specified type '{_type}' is not a valid type.")
+        if not self._object_is_type(type_):
+            raise TypeError(f"Specified type '{type_}' is not a valid type.")
 
-        self._type = _type
+        self.type_ = type_
         self.alias = alias
         self.allow_null = allow_null
         self.allow_blank = allow_blank
@@ -171,7 +171,7 @@ class Field(typing.Generic[_T], metaclass=FieldMeta):
                 return
             if not self.check_type(default_value):
                 raise FieldError(
-                    f"Default value '{default_value}', is not of type '{self._repr_type(self.get_type())}'."
+                    f"Default value '{default_value}', is not of type '{self._repr_type(self.type_)}'."
                 )
         return
 
@@ -215,7 +215,7 @@ class Field(typing.Generic[_T], metaclass=FieldMeta):
 
     def get_type(self) -> typing.Union[typing.Type[_T], typing.Type[undefined]]:
         """Return the expected type for field values."""
-        return self._type
+        return self.type_
 
     @property
     def validators(self) -> typing.List[FieldValidator[_T, "_Field"]]:
@@ -295,9 +295,9 @@ class Field(typing.Generic[_T], metaclass=FieldMeta):
 
     def check_type(self, value: typing.Any) -> typing.TypeGuard[_T]:
         """Check if the value is of the expected type."""
-        if self.get_type() is undefined:
+        if self.type_ is undefined:
             return True
-        return isinstance(value, self.get_type())
+        return isinstance(value, self.type_)
 
     def bind(
         self,
@@ -346,7 +346,7 @@ class Field(typing.Generic[_T], metaclass=FieldMeta):
 
         if not self.check_type(casted_value):
             raise FieldError(
-                f"'{field_name}' must be of type/form '{self._repr_type(self.get_type())}', not '{type(casted_value).__name__}'."
+                f"'{field_name}' must be of type/form '{self._repr_type(self.type_)}', not '{type(casted_value).__name__}'."
             )
 
         self.run_validators(casted_value, instance)
@@ -370,7 +370,7 @@ class Field(typing.Generic[_T], metaclass=FieldMeta):
 
         Converts the field's value to the specified type before it is set on the instance.
         """
-        field_type = self.get_type()
+        field_type = self.type_
         if issubclass(field_type, undefined) or isinstance(value, field_type):
             # If the value is a field, use a copy of the field to avoid shared state.
             if isinstance(value, Field):
@@ -383,7 +383,7 @@ class Field(typing.Generic[_T], metaclass=FieldMeta):
         """
         Return True if the value is blank, else False.
         """
-        if self._lower_if_string(value) in [
+        if _lower_if_string(value) in [
             *type(self).default_blank_values,
             *type(self).blank_values,
         ]:
@@ -394,7 +394,7 @@ class Field(typing.Generic[_T], metaclass=FieldMeta):
         """
         Return True if the value is null, else False.
         """
-        if self._lower_if_string(value) in [
+        if _lower_if_string(value) in [
             *type(self).default_null_values,
             *type(self).null_values,
         ]:
@@ -428,17 +428,17 @@ class Field(typing.Generic[_T], metaclass=FieldMeta):
             ) from exc
 
     @staticmethod
-    def _repr_type(_type: typing.Type) -> str:
+    def _repr_type(type_: typing.Type) -> str:
         """Return a string representation of the field type."""
-        if isinstance(_type, typing._SpecialForm):
-            return _type._name
+        if isinstance(type_, typing._SpecialForm):
+            return type_._name
 
-        if is_generic_type(_type):
-            return f"{_type.__origin__.__name__}[{' | '.join([Field._repr_type(arg) for arg in typing.get_args(_type)])}]"
+        if is_generic_type(type_):
+            return f"{type_.__origin__.__name__}[{' | '.join([Field._repr_type(arg) for arg in typing.get_args(type_)])}]"
 
-        if is_iterable(_type):
-            return " | ".join([Field._repr_type(arg) for arg in _type])
-        return _type.__name__
+        if is_iterable(type_):
+            return " | ".join([Field._repr_type(arg) for arg in type_])
+        return type_.__name__
 
     @staticmethod
     def _lower_if_string(value: _R) -> _R:
@@ -518,7 +518,7 @@ class AnyField(Field[typing.Any]):
 
     def __init__(self, **kwargs: Unpack[FieldInitKwargs]):
         kwargs.setdefault("allow_null", True)
-        super().__init__(_type=undefined, **kwargs)
+        super().__init__(type_=undefined, **kwargs)
 
 
 class BooleanField(Field[bool]):
@@ -544,12 +544,12 @@ class BooleanField(Field[bool]):
 
     def __init__(self, **kwargs: Unpack[FieldInitKwargs]):
         kwargs.setdefault("allow_null", True)
-        super().__init__(_type=bool, **kwargs)
+        super().__init__(type_=bool, **kwargs)
 
     def cast_to_type(self, value: typing.Any):
-        if self._lower_if_string(value) in self.TRUTHY_VALUES:
+        if _lower_if_string(value) in self.TRUTHY_VALUES:
             return True
-        if self._lower_if_string(value) in self.FALSY_VALUES:
+        if _lower_if_string(value) in self.FALSY_VALUES:
             return False
         return bool(value)
 
@@ -574,7 +574,7 @@ class StringField(Field[str]):
         :param trim_whitespaces: If True, leading and trailing whitespaces will be removed.
         :param kwargs: Additional keyword arguments for the field.
         """
-        super().__init__(_type=str, **kwargs)
+        super().__init__(type_=str, **kwargs)
         self.max_length = max_length or type(self).DEFAULT_MAX_LENGTH
         self.trim_whitespaces = trim_whitespaces
 
@@ -637,7 +637,7 @@ class FloatField(MinMaxValueMixin, Field[float]):
 
     def __init__(self, **kwargs: Unpack[FieldInitKwargs]):
         kwargs["allow_blank"] = False  # Floats cannot be blank
-        super().__init__(_type=float, **kwargs)
+        super().__init__(type_=float, **kwargs)
 
 
 class IntegerField(MinMaxValueMixin, Field[int]):
@@ -645,7 +645,7 @@ class IntegerField(MinMaxValueMixin, Field[int]):
 
     def __init__(self, **kwargs: Unpack[FieldInitKwargs]):
         kwargs["allow_blank"] = False  # Integers cannot be blank
-        super().__init__(_type=int, **kwargs)
+        super().__init__(type_=int, **kwargs)
 
 
 class DictField(Field[typing.Dict]):
@@ -663,7 +663,7 @@ class UUIDField(Field[uuid.UUID]):
     """Field for handling UUID values."""
 
     def __init__(self, **kwargs: Unpack[FieldInitKwargs]):
-        super().__init__(_type=uuid.UUID, **kwargs)
+        super().__init__(type_=uuid.UUID, **kwargs)
 
     def cast_to_type(self, value: typing.Any):
         if isinstance(value, uuid.UUID):
@@ -680,7 +680,7 @@ class BaseListField(Field[_T]):
 
     def __init__(
         self,
-        _type: typing.Type[_T],
+        type_: typing.Type[_T],
         child: typing.Optional[Field[_V]] = None,
         *,
         size: typing.Optional[int] = None,
@@ -689,15 +689,15 @@ class BaseListField(Field[_T]):
         """
         Initialize the field.
 
-        :param _type: The expected list/iterable type for the field.
+        :param type_: The expected list/iterable type for the field.
         :param child: Optional field for validating elements in the field's value.
         :param size: Optional size constraint for the list/iterable.
         """
-        if not is_iterable_type(_type, exclude=(str, bytes)):
+        if not is_iterable_type(type_, exclude=(str, bytes)):
             raise TypeError(
                 "Specified type must be an iterable type; excluding str or bytes."
             )
-        super().__init__(_type=_type, **kwargs)
+        super().__init__(type_=type_, **kwargs)
 
         if not isinstance(child, Field):
             raise TypeError("child must be a Field")
@@ -738,7 +738,7 @@ class ListField(BaseListField[typing.List]):
         child: typing.Optional[Field[_V]] = None,
         **kwargs: Unpack[FieldInitKwargs],
     ):
-        super().__init__(_type=list, child=child, **kwargs)
+        super().__init__(type_=list, child=child, **kwargs)
 
 
 class SetField(BaseListField[typing.Set]):
@@ -753,7 +753,7 @@ class SetField(BaseListField[typing.Set]):
         child: typing.Optional[Field[_V]] = None,
         **kwargs: Unpack[FieldInitKwargs],
     ):
-        super().__init__(_type=set, child=child, **kwargs)
+        super().__init__(type_=set, child=child, **kwargs)
 
     def validate(
         self, value: typing.Any, instance: typing.Optional["_Field"]
@@ -776,7 +776,7 @@ class TupleField(BaseListField[typing.Tuple]):
         child: Field[_V] = None,
         **kwargs: Unpack[FieldInitKwargs],
     ):
-        super().__init__(_type=tuple, child=child, **kwargs)
+        super().__init__(type_=tuple, child=child, **kwargs)
 
     def validate(
         self, value: typing.Any, instance: typing.Optional["_Field"]
@@ -801,7 +801,7 @@ class DecimalField(Field[decimal.Decimal]):
         :param dp: The number of decimal places to round the field's value to.
         :param kwargs: Additional keyword arguments for the field.
         """
-        super().__init__(_type=decimal.Decimal, **kwargs)
+        super().__init__(type_=decimal.Decimal, **kwargs)
         self.dp = None if dp is None else int(dp)
 
     def cast_to_type(self, value):
@@ -834,7 +834,7 @@ class URLField(Field[Url]):
     """Field for handling URL values."""
 
     def __init__(self, **kwargs: Unpack[FieldInitKwargs]):
-        super().__init__(_type=(str, Url), **kwargs)
+        super().__init__(type_=(str, Url), **kwargs)
 
     def cast_to_type(self, value: typing.Any):
         if isinstance(value, Url):
@@ -888,17 +888,17 @@ class TypedChoiceField(ChoiceMixin, Field[_T]):
 
     def __init__(
         self,
-        _type: typing.Type[_T],
+        type_: typing.Type[_T],
         choices: typing.List[_T],
         **kwargs: Unpack[FieldInitKwargs],
     ):
         """
         Initialize the field.
 
-        :param _type: The expected type for choice field's values.
+        :param type_: The expected type for choice field's values.
         :param choices: A list of valid choices for the field.
         """
-        super().__init__(_type=_type, choices=choices, **kwargs)
+        super().__init__(type_=type_, choices=choices, **kwargs)
 
 
 class JSONField(AnyField):
@@ -965,7 +965,7 @@ class IPAddressField(Field[typing.Union[ipaddress.IPv4Address, ipaddress.IPv6Add
 
     def __init__(self, **kwargs: Unpack[FieldInitKwargs]):
         super().__init__(
-            _type=(str, ipaddress.IPv4Address, ipaddress.IPv6Address), **kwargs
+            type_=(str, ipaddress.IPv4Address, ipaddress.IPv6Address), **kwargs
         )
 
     def cast_to_type(self, value: typing.Any):
@@ -1017,7 +1017,7 @@ class DateField(Field[datetime.date]):
         :param output_format: The preferred output format for the date value.
         :param kwargs: Additional keyword arguments for the field.
         """
-        super().__init__(_type=(str, datetime.date), **kwargs)
+        super().__init__(type_=(str, datetime.date), **kwargs)
         self.input_format = input_format
         self.output_format = output_format or type(self).DEFAULT_OUTPUT_FORMAT
 
@@ -1072,7 +1072,7 @@ class TimeField(Field[datetime.time]):
         :param output_format: The preferred output format for the time value.
         :param kwargs: Additional keyword arguments for the field.
         """
-        super().__init__(_type=(str, datetime.time), **kwargs)
+        super().__init__(type_=(str, datetime.time), **kwargs)
         self.input_format = input_format
         self.output_format = output_format or type(self).DEFAULT_OUTPUT_FORMAT
 
@@ -1111,7 +1111,7 @@ class DurationField(Field[datetime.timedelta]):
     """Field for handling duration values."""
 
     def __init__(self, **kwargs: Unpack[FieldInitKwargs]):
-        super().__init__(_type=(str, datetime.timedelta), **kwargs)
+        super().__init__(type_=(str, datetime.timedelta), **kwargs)
 
     def parse_duration(self, value: str) -> datetime.timedelta:
         """
@@ -1164,7 +1164,7 @@ class DateTimeField(Field[datetime.datetime]):
             the datetime value will be represented in this timezone.
         :param kwargs: Additional keyword arguments for the field.
         """
-        super().__init__(_type=(str, datetime.datetime), **kwargs)
+        super().__init__(type_=(str, datetime.datetime), **kwargs)
         self.input_format = input_format
         self.output_format = output_format or type(self).DEFAULT_OUTPUT_FORMAT
         self.tz = tz
@@ -1216,7 +1216,7 @@ class BytesField(Field[bytes]):
         :param str_encoding: The encoding to use when encoding/decoding byte strings.
         :param kwargs: Additional keyword arguments for the field.
         """
-        super().__init__(_type=(str, bytes), **kwargs)
+        super().__init__(type_=(str, bytes), **kwargs)
         self.str_encoding = str_encoding
 
     def cast_to_type(self, value: typing.Any):
@@ -1240,7 +1240,7 @@ class IOField(Field[typing.IO]):
     """Field for handling file-like I/O objects."""
 
     def __init__(self, **kwargs: Unpack[FieldInitKwargs]):
-        super().__init__(_type=io.IOBase, **kwargs)
+        super().__init__(type_=io.IOBase, **kwargs)
 
     def validate(self, value: typing.Any, instance: typing.Optional["_Field"]):
         """Validate that the value is a file-like object."""
@@ -1373,7 +1373,7 @@ try:
             :param output_format: The preferred output format for the phone number value.
             :param kwargs: Additional keyword arguments for the field.
             """
-            super().__init__(_type=(str, PhoneNumber), **kwargs)
+            super().__init__(type_=(str, PhoneNumber), **kwargs)
             self.output_format = output_format or type(self).DEFAULT_OUTPUT_FORMAT
 
         def cast_to_type(self, value: typing.Any):

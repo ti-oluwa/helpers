@@ -41,7 +41,7 @@ def is_mapping(obj: Any) -> bool:
 
 def is_mapping_type(tp: Type[Any], /) -> bool:
     """Check if a given type is a mapping (like dict)."""
-    return isinstance(tp, type) and issubclass(tp, collections.abc.Mapping)
+    return issubclass(tp, collections.abc.Mapping)
 
 
 def is_iterable_type(
@@ -53,7 +53,7 @@ def is_iterable_type(
     :param tp: The type to check.
     :param exclude: A tuple of types to return False for, even if they are iterable types.
     """
-    is_iter_type = isinstance(tp, type) and issubclass(tp, collections.abc.Iterable)
+    is_iter_type = issubclass(tp, collections.abc.Iterable)
     if not is_iter_type:
         return False
 
@@ -92,8 +92,6 @@ def bytes_to_base64(b: Union[BytesIO, bytes]) -> str:
 
 def str_is_base64(s: str, encoding: str = "utf-8") -> bool:
     try:
-        if not isinstance(s, str):
-            return False
         # Encode string to bytes and then decode
         b = s.encode(encoding=encoding)
         decoded = base64.b64decode(b, validate=True)
@@ -114,27 +112,6 @@ def bytes_is_base64(b: bytes) -> bool:
         return False
 
 
-Composable = TypeVar("Composable", bound=Callable[..., Any])
-
-
-def compose(*functions: Composable) -> Composable:
-    """
-    Compose multiple functions into a single function.
-
-    :param functions: The functions to be composed.
-    :return: A composed function.
-    """
-
-    def apply(function: Composable, *args, **kwargs):
-        return function(*args, **kwargs)
-
-    def composed(*args, **kwargs):
-        # initial = apply(functions[0], *args, **kwargs)
-        # return functools.reduce(apply, functions, initial)
-        ...
-
-    return composed
-
 
 def get_value_by_traversal_path(
     data: Dict[str, Any], path: str, delimiter: str = "."
@@ -147,9 +124,9 @@ def get_value_by_traversal_path(
     :param delimiter: The delimiter used in the traversal path.
     :return: The value at the end of the traversal path.
     """
-    path = path.split(delimiter)
+    parts = path.split(delimiter)
     value = data
-    for key in path:
+    for key in parts:
         value = value.get(key, None)
         if value is None:
             return None
@@ -167,9 +144,9 @@ def get_attr_by_traversal_path(
     :param delimiter: The delimiter used in the traversal path.
     :return: The attribute at the end of the traversal path.
     """
-    path = path.split(delimiter)
+    parts = path.split(delimiter)
     value = obj
-    for key in path:
+    for key in parts:
         value = getattr(value, key, None)
         if value is None:
             return None

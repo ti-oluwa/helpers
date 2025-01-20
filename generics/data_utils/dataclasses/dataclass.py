@@ -49,7 +49,7 @@ class DataClass(Field[Self], metaclass=DataClassMeta):
         :param raw: A dictionary of raw data to initialize the dataclass with.
         :param kwargs: Additional keyword arguments to initialize the dataclass with.
         """
-        super().__init__(_type=type(self), **kwargs)
+        super().__init__(type_=type(self), **kwargs)
         if raw:
             self._load_raw(raw)
         return
