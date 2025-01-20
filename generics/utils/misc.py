@@ -65,7 +65,11 @@ def is_mapping(obj: Any) -> TypeGuard[collections.abc.Mapping]:
 
 def is_mapping_type(tp: Type[Any], /) -> TypeGuard[Type[collections.abc.Mapping]]:
     """Check if a given type is a mapping (like dict)."""
+<<<<<<< HEAD
     return inspect.isclass(type) and issubclass(tp, collections.abc.Mapping)
+=======
+    return issubclass(tp, collections.abc.Mapping)
+>>>>>>> a03e649 (Update to django modules)
 
 
 def is_iterable_type(
@@ -77,7 +81,7 @@ def is_iterable_type(
     :param tp: The type to check.
     :param exclude: A tuple of types to return False for, even if they are iterable types.
     """
-    is_iter_type = isinstance(tp, type) and issubclass(tp, collections.abc.Iterable)
+    is_iter_type = issubclass(tp, collections.abc.Iterable)
     if not is_iter_type:
         return False
 
@@ -116,8 +120,6 @@ def bytes_to_base64(b: Union[Buffer, bytes]) -> str:
 
 def str_is_base64(s: str, encoding: str = "utf-8") -> bool:
     try:
-        if not isinstance(s, str):
-            return False
         # Encode string to bytes and then decode
         b = s.encode(encoding=encoding)
         decoded = base64.b64decode(b, validate=True)
@@ -138,6 +140,10 @@ def bytes_is_base64(b: bytes) -> bool:
         return False
 
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> a03e649 (Update to django modules)
 def get_value_by_traversal_path(
     data: Dict[str, Any], path: str, delimiter: str = "."
 ) -> Union[Any, None]:
