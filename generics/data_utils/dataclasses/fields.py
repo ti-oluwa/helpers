@@ -123,12 +123,16 @@ class FieldBase(typing.Generic[_T], metaclass=FieldBaseMeta):
     def __init__(
         self,
 <<<<<<< HEAD
+        type_: typing.Type[_T],
+=======
+<<<<<<< HEAD
         type_: typing.Union[
             typing.Type[_T], typing.Type[undefined], typing.Tuple[typing.Type[_T], ...]
         ],
 =======
         type_: typing.Type[_T],
 >>>>>>> a03e649 (Update to django modules)
+>>>>>>> 6ff9da08d3b2e8b60f10eaeb094b8cace4ea168a
         *,
         lazy: bool = False,
         alias: typing.Optional[str] = None,
@@ -144,8 +148,11 @@ class FieldBase(typing.Generic[_T], metaclass=FieldBaseMeta):
 
         :param type_: The expected type for field values.
 <<<<<<< HEAD
+=======
+<<<<<<< HEAD
         :param alias: Alternative name for the field, defaults to None.
 =======
+>>>>>>> 6ff9da08d3b2e8b60f10eaeb094b8cace4ea168a
         :param alias: Optional string for alternative field naming, defaults to None.
 >>>>>>> a03e649 (Update to django modules)
         :param allow_null: If True, permits None values, defaults to False.
@@ -159,14 +166,20 @@ class FieldBase(typing.Generic[_T], metaclass=FieldBaseMeta):
             Use this to modify the value before it is validated and set on the instance.
         """
 <<<<<<< HEAD
+=======
+<<<<<<< HEAD
         self.type_ = type_
         self._lazy = lazy
 =======
+>>>>>>> 6ff9da08d3b2e8b60f10eaeb094b8cace4ea168a
         if not self._object_is_type(type_):
             raise TypeError(f"Specified type '{type_}' is not a valid type.")
 
         self.type_ = type_
+<<<<<<< HEAD
+=======
 >>>>>>> a03e649 (Update to django modules)
+>>>>>>> 6ff9da08d3b2e8b60f10eaeb094b8cace4ea168a
         self.alias = alias
         self.allow_null = allow_null
         self.allow_blank = allow_blank
@@ -368,7 +381,10 @@ class FieldBase(typing.Generic[_T], metaclass=FieldBaseMeta):
 =======
     def check_type(self, value: typing.Any) -> typing.TypeGuard[_T]:
         """Check if the value is of the expected type."""
+<<<<<<< HEAD
+=======
 >>>>>>> a03e649 (Update to django modules)
+>>>>>>> 6ff9da08d3b2e8b60f10eaeb094b8cace4ea168a
         if self.type_ is undefined:
             return True
         return isinstance(value, self.type_)
@@ -402,10 +418,14 @@ class FieldBase(typing.Generic[_T], metaclass=FieldBaseMeta):
                 return None
             raise FieldError(
 <<<<<<< HEAD
+                f"'{field_name}' must be of type/form '{self._repr_type(self.type_)}', not '{type(casted_value).__name__}'."
+=======
+<<<<<<< HEAD
                 f"'{self.get_name()}' is not nullable but got null value '{value}'."
 =======
                 f"'{field_name}' must be of type/form '{self._repr_type(self.type_)}', not '{type(casted_value).__name__}'."
 >>>>>>> a03e649 (Update to django modules)
+>>>>>>> 6ff9da08d3b2e8b60f10eaeb094b8cace4ea168a
             )
 
         if self.is_blank(value):
@@ -455,8 +475,11 @@ class FieldBase(typing.Generic[_T], metaclass=FieldBaseMeta):
         Converts the field's value to the specified type before it is set on the instance.
         """
 <<<<<<< HEAD
+=======
+<<<<<<< HEAD
         if self.check_type(value):
 =======
+>>>>>>> 6ff9da08d3b2e8b60f10eaeb094b8cace4ea168a
         field_type = self.type_
         if issubclass(field_type, undefined) or isinstance(value, field_type):
             # If the value is a field, use a copy of the field to avoid shared state.
@@ -471,6 +494,8 @@ class FieldBase(typing.Generic[_T], metaclass=FieldBaseMeta):
         Return True if the value is blank, else False.
         """
 <<<<<<< HEAD
+=======
+<<<<<<< HEAD
         blanks = type(self)._blanks
         if not blanks:
             return False
@@ -480,6 +505,7 @@ class FieldBase(typing.Generic[_T], metaclass=FieldBaseMeta):
         except TypeError:
             return value in list(blanks)
 =======
+>>>>>>> 6ff9da08d3b2e8b60f10eaeb094b8cace4ea168a
         if _lower_if_string(value) in [
             *type(self).default_blank_values,
             *type(self).blank_values,
@@ -493,10 +519,13 @@ class FieldBase(typing.Generic[_T], metaclass=FieldBaseMeta):
         Return True if the value is null, else False.
         """
 <<<<<<< HEAD
+=======
+<<<<<<< HEAD
         nulls = type(self)._nulls
         if not nulls:
             return False
 =======
+>>>>>>> 6ff9da08d3b2e8b60f10eaeb094b8cace4ea168a
         if _lower_if_string(value) in [
             *type(self).default_null_values,
             *type(self).null_values,
@@ -529,6 +558,9 @@ class FieldBase(typing.Generic[_T], metaclass=FieldBaseMeta):
 
     @staticmethod
 <<<<<<< HEAD
+    def _repr_type(type_: typing.Type) -> str:
+=======
+<<<<<<< HEAD
     def _repr_type(
         type_: typing.Union[
             typing.Type[typing.Any], typing.Tuple[typing.Type[typing.Any]]
@@ -537,10 +569,19 @@ class FieldBase(typing.Generic[_T], metaclass=FieldBaseMeta):
 =======
     def _repr_type(type_: typing.Type) -> str:
 >>>>>>> a03e649 (Update to django modules)
+>>>>>>> 6ff9da08d3b2e8b60f10eaeb094b8cace4ea168a
         """Return a string representation of the field type."""
         if isinstance(type_, typing._SpecialForm):
             return type_._name
 
+<<<<<<< HEAD
+        if is_generic_type(type_):
+            return f"{type_.__origin__.__name__}[{' | '.join([Field._repr_type(arg) for arg in typing.get_args(type_)])}]"
+
+        if is_iterable(type_):
+            return " | ".join([Field._repr_type(arg) for arg in type_])
+        return type_.__name__
+=======
 <<<<<<< HEAD
         if is_iterable(type_):
             return " | ".join([Field._repr_type(arg) for arg in type_])
@@ -550,6 +591,7 @@ class FieldBase(typing.Generic[_T], metaclass=FieldBaseMeta):
 =======
         if is_generic_type(type_):
             return f"{type_.__origin__.__name__}[{' | '.join([Field._repr_type(arg) for arg in typing.get_args(type_)])}]"
+>>>>>>> 6ff9da08d3b2e8b60f10eaeb094b8cace4ea168a
 
         if is_iterable(type_):
             return " | ".join([Field._repr_type(arg) for arg in type_])
@@ -727,6 +769,11 @@ class BooleanField(Field[bool]):
 
     def cast_to_type(self, value: typing.Any):
 <<<<<<< HEAD
+        if _lower_if_string(value) in self.TRUTHY_VALUES:
+            return True
+        if _lower_if_string(value) in self.FALSY_VALUES:
+=======
+<<<<<<< HEAD
         if self.check_type(value):
             return value
 
@@ -738,6 +785,7 @@ class BooleanField(Field[bool]):
             return True
         if _lower_if_string(value) in self.FALSY_VALUES:
 >>>>>>> a03e649 (Update to django modules)
+>>>>>>> 6ff9da08d3b2e8b60f10eaeb094b8cace4ea168a
             return False
         return bool(value)
 
@@ -836,6 +884,9 @@ class FloatField(MinMaxValueMixin[float], Field[float]):
     ):
         kwargs["allow_blank"] = False  # Floats cannot be blank
 <<<<<<< HEAD
+        super().__init__(type_=float, **kwargs)
+=======
+<<<<<<< HEAD
         super().__init__(
             type_=float,
             min_value=min_value,
@@ -845,6 +896,7 @@ class FloatField(MinMaxValueMixin[float], Field[float]):
 =======
         super().__init__(type_=float, **kwargs)
 >>>>>>> a03e649 (Update to django modules)
+>>>>>>> 6ff9da08d3b2e8b60f10eaeb094b8cace4ea168a
 
 
 class IntegerField(MinMaxValueMixin[int], Field[int]):
@@ -861,6 +913,9 @@ class IntegerField(MinMaxValueMixin[int], Field[int]):
         **kwargs: Unpack[FieldInitKwargs[int]],
     ):
         kwargs["allow_blank"] = False  # Integers cannot be blank
+<<<<<<< HEAD
+        super().__init__(type_=int, **kwargs)
+=======
 <<<<<<< HEAD
         super().__init__(
             type_=int,
@@ -940,6 +995,7 @@ class StringField(Field[str]):
 =======
         super().__init__(type_=int, **kwargs)
 >>>>>>> a03e649 (Update to django modules)
+>>>>>>> 6ff9da08d3b2e8b60f10eaeb094b8cace4ea168a
 
 
 class DictField(Field[typing.Dict]):
@@ -960,7 +1016,10 @@ class UUIDField(Field[uuid.UUID]):
     def __init__(self, **kwargs: Unpack[FieldInitKwargs[uuid.UUID]]):
 =======
     def __init__(self, **kwargs: Unpack[FieldInitKwargs]):
+<<<<<<< HEAD
+=======
 >>>>>>> a03e649 (Update to django modules)
+>>>>>>> 6ff9da08d3b2e8b60f10eaeb094b8cace4ea168a
         super().__init__(type_=uuid.UUID, **kwargs)
 
     def cast_to_type(self, value: typing.Any):
@@ -1000,10 +1059,14 @@ class IterFieldBase(typing.Generic[_V, _T]):
         Initialize the field.
 
 <<<<<<< HEAD
+        :param type_: The expected list/iterable type for the field.
+=======
+<<<<<<< HEAD
         :param type_: The expected iterable type for the field.
 =======
         :param type_: The expected list/iterable type for the field.
 >>>>>>> a03e649 (Update to django modules)
+>>>>>>> 6ff9da08d3b2e8b60f10eaeb094b8cace4ea168a
         :param child: Optional field for validating elements in the field's value.
         :param size: Optional size constraint for the iterable.
         """
@@ -1072,10 +1135,14 @@ class ListField(IterFieldBase[_V, typing.List[_V]], Field[typing.List[_V]]):
         **kwargs: Unpack[FieldInitKwargs[typing.List[_V]]],
     ):
 <<<<<<< HEAD
+        super().__init__(type_=list, child=child, **kwargs)
+=======
+<<<<<<< HEAD
         super().__init__(type_=list, child=child, size=size, **kwargs)
 =======
         super().__init__(type_=list, child=child, **kwargs)
 >>>>>>> a03e649 (Update to django modules)
+>>>>>>> 6ff9da08d3b2e8b60f10eaeb094b8cace4ea168a
 
 
 class SetField(IterFieldBase[_V, typing.Set[_V]], Field[typing.Set[_V]]):
@@ -1102,8 +1169,11 @@ class TupleField(IterFieldBase[_V, typing.Tuple[_V]], Field[typing.Tuple[_V]]):
         **kwargs: Unpack[FieldInitKwargs[typing.Tuple[_V]]],
     ):
 <<<<<<< HEAD
+=======
+<<<<<<< HEAD
         super().__init__(type_=tuple, child=child, size=size, **kwargs)
 =======
+>>>>>>> 6ff9da08d3b2e8b60f10eaeb094b8cace4ea168a
         super().__init__(type_=set, child=child, **kwargs)
 
     def validate(
@@ -1157,8 +1227,11 @@ class DecimalField(Field[decimal.Decimal]):
         """
         super().__init__(type_=decimal.Decimal, **kwargs)
 <<<<<<< HEAD
+=======
+<<<<<<< HEAD
         self.dp = dp
 =======
+>>>>>>> 6ff9da08d3b2e8b60f10eaeb094b8cace4ea168a
         self.dp = None if dp is None else int(dp)
 >>>>>>> a03e649 (Update to django modules)
 
@@ -1217,7 +1290,10 @@ class URLField(Field[Url]):
 =======
     def __init__(self, **kwargs: Unpack[FieldInitKwargs]):
         super().__init__(type_=(str, Url), **kwargs)
+<<<<<<< HEAD
+=======
 >>>>>>> a03e649 (Update to django modules)
+>>>>>>> 6ff9da08d3b2e8b60f10eaeb094b8cace4ea168a
 
     def cast_to_type(self, value: typing.Any):
         if self.check_type(value):
@@ -1285,9 +1361,12 @@ class TypedChoiceField(ChoiceFieldBase[_T], Field[_T]):
         self,
         type_: typing.Type[_T],
 <<<<<<< HEAD
+=======
+<<<<<<< HEAD
         *,
 =======
 >>>>>>> a03e649 (Update to django modules)
+>>>>>>> 6ff9da08d3b2e8b60f10eaeb094b8cace4ea168a
         choices: typing.List[_T],
         **kwargs: Unpack[FieldInitKwargs[_T]],
     ):
@@ -1298,10 +1377,14 @@ class TypedChoiceField(ChoiceFieldBase[_T], Field[_T]):
         :param choices: A list of valid choices for the field.
         """
 <<<<<<< HEAD
+        super().__init__(type_=type_, choices=choices, **kwargs)
+=======
+<<<<<<< HEAD
         super().__init__(choices=choices, type_=type_, **kwargs)  # type: ignore
 =======
         super().__init__(type_=type_, choices=choices, **kwargs)
 >>>>>>> a03e649 (Update to django modules)
+>>>>>>> 6ff9da08d3b2e8b60f10eaeb094b8cace4ea168a
 
 
 _DEFAULT_JSON_TYPES = (dict, list, str, int, float, bool, NoneType)
@@ -1409,6 +1492,9 @@ class HSLColorField(StringField):
         kwargs["to_uppercase"] = False
         super().__init__(
 <<<<<<< HEAD
+            type_=(str, ipaddress.IPv4Address, ipaddress.IPv6Address), **kwargs
+=======
+<<<<<<< HEAD
             min_length=min_length,
             max_length=max_length,
             trim_whitespaces=trim_whitespaces,
@@ -1416,6 +1502,7 @@ class HSLColorField(StringField):
 =======
             type_=(str, ipaddress.IPv4Address, ipaddress.IPv6Address), **kwargs
 >>>>>>> a03e649 (Update to django modules)
+>>>>>>> 6ff9da08d3b2e8b60f10eaeb094b8cace4ea168a
         )
 
 
@@ -1589,7 +1676,10 @@ class DurationField(Field[datetime.timedelta]):
 =======
     def __init__(self, **kwargs: Unpack[FieldInitKwargs]):
         super().__init__(type_=(str, datetime.timedelta), **kwargs)
+<<<<<<< HEAD
+=======
 >>>>>>> a03e649 (Update to django modules)
+>>>>>>> 6ff9da08d3b2e8b60f10eaeb094b8cace4ea168a
 
     def __init__(
         self,
@@ -1813,6 +1903,8 @@ class DateTimeField(DateTimeFieldBase[datetime.datetime], Field[datetime.datetim
         :param kwargs: Additional keyword arguments for the field.
         """
 <<<<<<< HEAD
+=======
+<<<<<<< HEAD
         super().__init__(
             type_=datetime.datetime,
             input_formats=input_formats,
@@ -1821,6 +1913,7 @@ class DateTimeField(DateTimeFieldBase[datetime.datetime], Field[datetime.datetim
             **kwargs,
         )
 =======
+>>>>>>> 6ff9da08d3b2e8b60f10eaeb094b8cace4ea168a
         super().__init__(type_=(str, datetime.datetime), **kwargs)
         self.input_format = input_format
         self.output_format = output_format or type(self).DEFAULT_OUTPUT_FORMAT
@@ -1861,9 +1954,12 @@ class BytesField(Field[bytes]):
         :param kwargs: Additional keyword arguments for the field.
         """
 <<<<<<< HEAD
+=======
+<<<<<<< HEAD
         super().__init__(type_=bytes, **kwargs)
         self.encoding = encoding
 =======
+>>>>>>> 6ff9da08d3b2e8b60f10eaeb094b8cace4ea168a
         super().__init__(type_=(str, bytes), **kwargs)
         self.str_encoding = str_encoding
 >>>>>>> a03e649 (Update to django modules)
@@ -1894,7 +1990,10 @@ class IOField(Field[io.IOBase]):
     def __init__(self, **kwargs: Unpack[FieldInitKwargs[io.IOBase]]):
 =======
     def __init__(self, **kwargs: Unpack[FieldInitKwargs]):
+<<<<<<< HEAD
+=======
 >>>>>>> a03e649 (Update to django modules)
+>>>>>>> 6ff9da08d3b2e8b60f10eaeb094b8cace4ea168a
         super().__init__(type_=io.IOBase, **kwargs)
 
     def to_json(self, instance: FieldBase):
@@ -2023,10 +2122,14 @@ try:
             :param kwargs: Additional keyword arguments for the field.
             """
 <<<<<<< HEAD
+            super().__init__(type_=(str, PhoneNumber), **kwargs)
+=======
+<<<<<<< HEAD
             super().__init__(type_=PhoneNumber, **kwargs)
 =======
             super().__init__(type_=(str, PhoneNumber), **kwargs)
 >>>>>>> a03e649 (Update to django modules)
+>>>>>>> 6ff9da08d3b2e8b60f10eaeb094b8cace4ea168a
             self.output_format = output_format or type(self).DEFAULT_OUTPUT_FORMAT
 
         def cast_to_type(self, value: typing.Any):

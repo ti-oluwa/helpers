@@ -72,12 +72,15 @@ class DataClass(Field[Self], metaclass=DataClassMeta):
         :param kwargs: Additional keyword arguments to initialize the dataclass with.
         """
 <<<<<<< HEAD
+=======
+<<<<<<< HEAD
         kwargs.setdefault("lazy", True)
         super().__init__(type_=type(self), **kwargs)
 
         if data is not None:
             self.load_data(data)
 =======
+>>>>>>> 6ff9da08d3b2e8b60f10eaeb094b8cace4ea168a
         super().__init__(type_=type(self), **kwargs)
         if raw:
             self._load_raw(raw)
