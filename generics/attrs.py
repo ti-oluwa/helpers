@@ -10,16 +10,7 @@ deps_required(
 import typing
 import attrs
 import cattrs
-from typing import (
-    Generic,
-    get_origin,
-    get_args,
-    TypeVar,
-    Callable,
-    Dict,
-    Type,
-    Any,
-)
+
 import collections.abc
 from helpers.generics.utils.misc import (
     is_generic_type,
@@ -27,14 +18,14 @@ from helpers.generics.utils.misc import (
     is_iterable_type,
 )
 
-_AI = TypeVar("_AI", bound=attrs.AttrsInstance)
-T = TypeVar("T")
+_AI = typing.TypeVar("_AI", bound=attrs.AttrsInstance)
+T = typing.TypeVar("T")
 
 
-class NoCast(Generic[T]):
+class NoCast(typing.Generic[T]):
     """Wrapper class to indicate that a type should not be cast during structuring and unstructuring."""
 
-    def __init__(self, wrapped_type: Type[T]):
+    def __init__(self, wrapped_type: typing.Type[T]):
         self.wrapped_type = wrapped_type
 
     def __repr__(self) -> str:
@@ -56,29 +47,29 @@ class NoCast(Generic[T]):
         return (self.wrapped_type,)
 
 
-def unwrap_nocast_type(attr_type: Type[Any]) -> Type[Any]:
+def unwrap_nocast_type(attr_type: typing.Type[typing.Any]) -> typing.Type[typing.Any]:
     """
     Return the wrapped type if the type is wrapped in NoCast,
     otherwise return the type as is.
     """
-    origin = get_origin(attr_type)
+    origin = typing.get_origin(attr_type)
     if origin is NoCast:
-        return get_args(attr_type)[0]
+        return typing.get_args(attr_type)[0]
     return attr_type
 
 
-def is_nocast_type(attr_type: Type[Any]) -> bool:
+def is_nocast_type(attr_type: typing.Type[typing.Any]) -> bool:
     """
     Check if the type is wrapped in NoCast.
     """
-    return get_origin(attr_type) is NoCast
+    return typing.get_origin(attr_type) is NoCast
 
 
 def structure_to_generic_type(
-    value: Any, attr_type: Type[Any], converter: cattrs.Converter
-) -> Any:
+    value: typing.Any, attr_type: typing.Type[typing.Any], converter: cattrs.Converter
+) -> typing.Any:
     """
-    Recursively handle generic types (List, Dict, Union, Optional, etc.) during structuring.
+    Recursively handle generic types (List, typing.Dict, Union, Optional, etc.) during structuring.
     If the type is wrapped in NoCast, return the value as is without casting.
     """
     if attr_type is typing.Any:
@@ -88,8 +79,8 @@ def structure_to_generic_type(
         return value  # Skip casting if NoCast is applied
 
     attr_type = unwrap_nocast_type(attr_type)
-    origin = get_origin(attr_type)
-    args = get_args(attr_type)
+    origin = typing.get_origin(attr_type)
+    args = typing.get_args(attr_type)
 
     if origin is None:
         return value
@@ -153,13 +144,15 @@ def structure_to_generic_type(
 
 def cast_on_set_factory(
     converter: cattrs.Converter,
-) -> Callable[[Any, attrs.Attribute, Any], Any]:
+) -> typing.Callable[[typing.Any, attrs.Attribute, typing.Any], typing.Any]:
     """
     Factory function to create a casting function for attrs-based attributes.
     Skips casting for attributes wrapped in NoCast.
     """
 
-    def _cast_on_set(instance: Any, attribute: attrs.Attribute, value: Any) -> Any:
+    def _cast_on_set(
+        instance: typing.Any, attribute: attrs.Attribute, value: typing.Any
+    ) -> typing.Any:
         attr_type = attribute.type
         if attr_type is None:
             return value
@@ -187,7 +180,7 @@ def cast_on_set_factory(
 
 def structure_with_casting_factory(
     converter: cattrs.Converter,
-) -> Callable[[Dict[str, Any], Type[_AI]], _AI]:
+) -> typing.Callable[[typing.Dict[str, typing.Any], typing.Type[_AI]], _AI]:
     """
     Factory function to create a structuring function that casts values to declared types.
     Considers attribute aliases and uses them to fetch values from the input dictionary.
@@ -196,8 +189,8 @@ def structure_with_casting_factory(
     cast_on_set = cast_on_set_factory(converter)
 
     def _structure_with_casting(
-        data: Dict[str, Any],
-        cls: Type[_AI],
+        data: typing.Dict[str, typing.Any],
+        cls: typing.Type[_AI],
     ) -> _AI:
         """
         Structuring hook for cattrs converters that casts values to the declared type.
@@ -224,10 +217,10 @@ def structure_with_casting_factory(
 
 
 def unstructure_as_generic_type(
-    value: Any, attr_type: Type[Any], converter: cattrs.Converter
-) -> Any:
+    value: typing.Any, attr_type: typing.Type[typing.Any], converter: cattrs.Converter
+) -> typing.Any:
     """
-    Recursively handle unstructuring of generic types (List, Dict, Union, Optional, etc.)
+    Recursively handle unstructuring of generic types (List, typing.Dict, Union, Optional, etc.)
     using cattrs.Converter and applying the unstructure_as argument when appropriate.
 
     :param value: The value to unstructure.
@@ -242,8 +235,8 @@ def unstructure_as_generic_type(
         return value  # Skip casting if NoCast is applied
 
     attr_type = unwrap_nocast_type(attr_type)
-    origin = get_origin(attr_type)
-    args = get_args(attr_type)
+    origin = typing.get_origin(attr_type)
+    args = typing.get_args(attr_type)
 
     if origin is None:
         return value
@@ -265,7 +258,7 @@ def unstructure_as_generic_type(
         return value  # Return original value if no valid cast
 
     if is_mapping_type(origin) and len(args) == 2:
-        # Handle Mapping[K, V] (like Dict[K, V])
+        # Handle Mapping[K, V] (like typing.Dict[K, V])
         _map = {}
         for k, v in value.items():
             _map_key = (
@@ -308,13 +301,13 @@ def unstructure_as_generic_type(
 
 def unstructure_with_casting_factory(
     converter: cattrs.Converter,
-) -> Callable[[Any], Dict[str, Any]]:
+) -> typing.Callable[[typing.Any], typing.Dict[str, typing.Any]]:
     """
     Factory function to create an unstructuring function that casts values to declared types.
     Considers attribute aliases when unstructuring.
     """
 
-    def _unstructure_with_casting(instance: Any) -> Dict[str, Any]:
+    def _unstructure_with_casting(instance: typing.Any) -> typing.Dict[str, typing.Any]:
         """
         Unstructures the attrs-based class instance and casts values to their declared types.
         Considers attribute aliases while unstructuring.
@@ -357,10 +350,11 @@ def type_cast(
     converter: cattrs.Converter,
     cls: typing.Optional[typing.Type[_AI]] = None,
 ) -> typing.Union[
-    typing.Callable[[typing.Type[_AI]], typing.Type[_AI]], typing.Type[_AI]
+    typing.Callable[[typing.Type[_AI]], typing.Type[_AI]],
+    typing.Type[_AI],
 ]:
     """
-    Decorator.
+    Attrs class decorator.
 
     Registers structure and unstructure hooks for attrs-based classes on the
     provided cattrs converter instance, casting values to their declared types
@@ -373,10 +367,10 @@ def type_cast(
     if cls is None:
         return lambda cls: type_cast(converter, cls)
 
-    # Ensure that the class is an attrs-based class
+    # Ensures that the class is an attrs-based class
     if not attrs.has(cls):
         raise TypeError(
-            f"{cls.__name__} is not an attrs-based class. Type casting is only supported for attrs classes."
+            f"{cls.__name__} is not an attrs-based class. typing.Type casting is only supported for attrs classes."
         )
 
     # Pass the specific converter to both structure and unstructure hooks for attrs-based classes

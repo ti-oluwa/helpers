@@ -1,9 +1,10 @@
 import copy
-from inspect import isclass
+import sys
+import inspect
 import collections.abc
-from io import BytesIO
 from typing import (
     Iterator,
+    TypeGuard,
     Union,
     Callable,
     Any,
@@ -11,17 +12,40 @@ from typing import (
     Dict,
     Type,
     List,
+    Set,
     Iterable,
     AsyncIterator,
     AsyncIterable,
     Optional,
     Tuple,
+    Sequence,
 )
 import base64
 import functools
 from itertools import islice
+from typing_extensions import Buffer
 
 from .choice import ExtendedEnum
+
+
+def get_memory_size(obj: Any, seen: Optional[Set[int]] = None) -> float:
+    """Recursively calculate the total memory size of an object and its references."""
+    if seen is None:
+        seen = set()
+
+    obj_id = id(obj)
+    if obj_id in seen:
+        return 0
+    seen.add(obj_id)
+
+    size = sys.getsizeof(obj)
+    if isinstance(obj, dict):
+        size += sum(
+            get_memory_size(k, seen) + get_memory_size(v, seen) for k, v in obj.items()
+        )
+    elif isinstance(obj, (list, tuple, set, frozenset)):
+        size += sum(get_memory_size(i, seen) for i in obj)
+    return size
 
 
 def has_method(obj: Any, method_name: str) -> bool:
@@ -34,19 +58,27 @@ def type_implements_iter(tp: Type[Any], /) -> bool:
     return has_method(tp, "__iter__")
 
 
-def is_mapping(obj: Any) -> bool:
+def is_mapping(obj: Any) -> TypeGuard[collections.abc.Mapping]:
     """Check if an object is a mapping (like dict)."""
     return isinstance(obj, collections.abc.Mapping)
 
 
-def is_mapping_type(tp: Type[Any], /) -> bool:
+def is_mapping_type(tp: Type[Any], /) -> TypeGuard[Type[collections.abc.Mapping]]:
     """Check if a given type is a mapping (like dict)."""
+<<<<<<< HEAD
     return issubclass(tp, collections.abc.Mapping)
+=======
+<<<<<<< HEAD
+    return inspect.isclass(type) and issubclass(tp, collections.abc.Mapping)
+=======
+    return issubclass(tp, collections.abc.Mapping)
+>>>>>>> a03e649 (Update to django modules)
+>>>>>>> 6ff9da08d3b2e8b60f10eaeb094b8cace4ea168a
 
 
 def is_iterable_type(
-    tp: Type[Any], /, *, exclude: Optional[Tuple[Type[Any]]] = None
-) -> bool:
+    tp: Type[Any], /, *, exclude: Optional[Tuple[Type[Any], ...]] = None
+) -> TypeGuard[Type[collections.abc.Iterable]]:
     """
     Check if a given type is an iterable.
 
@@ -66,18 +98,18 @@ def is_iterable_type(
     return is_iter_type
 
 
-def is_iterable(obj: Any, *, exclude: Optional[Tuple[Type[Any]]] = None) -> bool:
+def is_iterable(obj: Any, *, exclude: Optional[Tuple[Type[Any], ...]] = None) -> TypeGuard[collections.abc.Iterable]:
     """Check if an object is an iterable."""
     return is_iterable_type(type(obj), exclude=exclude)
 
 
-def is_generic_type(tp: Type[Any]) -> bool:
+def is_generic_type(tp: Any) -> bool:
     """Check if a type is a generic type like List[str], Dict[str, int], etc."""
     return hasattr(tp, "__origin__")
 
 
-def is_exception_class(exc):
-    return isclass(exc) and issubclass(exc, BaseException)
+def is_exception_class(exc) -> TypeGuard[Type[BaseException]]:
+    return inspect.isclass(exc) and issubclass(exc, BaseException)
 
 
 def str_to_base64(s: str, encoding: str = "utf-8") -> str:
@@ -85,7 +117,7 @@ def str_to_base64(s: str, encoding: str = "utf-8") -> str:
     return bytes_to_base64(b)
 
 
-def bytes_to_base64(b: Union[BytesIO, bytes]) -> str:
+def bytes_to_base64(b: Union[Buffer, bytes]) -> str:
     """Convert bytes to a base64 encoded string."""
     return base64.b64encode(b).decode()
 
@@ -112,7 +144,13 @@ def bytes_is_base64(b: bytes) -> bool:
         return False
 
 
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+=======
+>>>>>>> 6ff9da08d3b2e8b60f10eaeb094b8cace4ea168a
 
+>>>>>>> a03e649 (Update to django modules)
 def get_value_by_traversal_path(
     data: Dict[str, Any], path: str, delimiter: str = "."
 ) -> Union[Any, None]:
@@ -174,7 +212,7 @@ def get_dict_diff(dict1: Dict, dict2: Dict) -> Dict:
     return diff_dict
 
 
-_Mapping = TypeVar("_Mapping", bound=collections.abc.Mapping)
+_Mapping = TypeVar("_Mapping", bound=collections.abc.MutableMapping)
 
 
 def merge_mappings(
@@ -250,7 +288,7 @@ def merge_mappings(
         if isinstance(target[key], collections.abc.Mapping) and isinstance(
             source_value, collections.abc.Mapping
         ):
-            target[key] = merger(target[key], source_value)
+            target[key] = merger(target[key], source_value) # type: ignore
         else:
             # Otherwise, just override the target value with the source value
             target[key] = source_value
@@ -303,12 +341,10 @@ def underscore_dict_keys(_dict: Dict[str, Any]) -> Dict[str, Any]:
     return {key.replace("-", "_"): value for key, value in _dict.items()}
 
 
-def comma_separated_to_int_float(value: str) -> Union[int, float]:
+def comma_separated_to_int_float(value: str) -> Union[str, int, float]:
     """Convert a comma-separated string into a single integer or float by concatenating the numbers."""
-    if not isinstance(value, str):
-        return value
     if not value:
-        return value
+        return 0
 
     try:
         stripped_value = "".join(value.split(","))
@@ -397,6 +433,15 @@ async def async_batched(
         yield batch
 
 
+def shift(i: Sequence[T], /, *, step: int = 1) -> Sequence[T]:
+    """
+    Shifts the elements of an iterable by the given step
+
+    Use a negative step to shift the elements in the backwards direction.
+    """
+    return [*i[-step:], *i[:-step]]
+
+
 __all__ = [
     "is_iterable_type",
     "is_iterable",
@@ -407,14 +452,15 @@ __all__ = [
     "bytes_to_base64",
     "str_is_base64",
     "bytes_is_base64",
-    "compose",
     "get_value_by_traversal_path",
     "get_attr_by_traversal_path",
     "merge_dicts",
+    "merge_mappings",
     "merge_enums",
     "get_dict_diff",
     "underscore_dict_keys",
     "python_type_to_html_input_type",
     "batched",
     "async_batched",
+    "shift",
 ]

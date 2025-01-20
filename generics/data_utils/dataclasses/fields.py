@@ -1,140 +1,160 @@
-"""Data fields for enforcing type validation and constraints."""
+"""Data fields"""
 
+from __future__ import annotations
+from types import MappingProxyType, NoneType
 import uuid
 import decimal
 import datetime
 import functools
 import typing
-import re
 import json
 import base64
 import io
 import copy
 import ipaddress
 from urllib3.util import Url, parse_url
+from typing_extensions import Unpack, Self
+
+try:
+    import zoneinfo
+except ImportError:
+    from backports import zoneinfo
 
 from helpers.generics.utils.misc import is_generic_type, is_iterable_type, is_iterable
-from helpers.dependencies import depends_on, deps_required
-from helpers.generics.data_utils.exceptions import DataError
-from ..parsers import parse_duration
+from helpers.dependencies import depends_on
+from helpers.generics.utils.datetime import iso_parse, parse_duration
+from helpers.generics.utils.misc import merge_mappings
+from . import validators
+from .exceptions import FieldError
+from .utils import iexact
 
-try:
-    from typing_extensions import Unpack
-except ImportError:
-    from typing import Unpack
 
-try:
-    from typing_extensions import ParamSpec
-except ImportError:
-    from typing import ParamSpec
-
-from helpers.generics.utils.misc import merge_dicts
+_T = typing.TypeVar("_T", covariant=True)
+_R = typing.TypeVar("_R")
+_V = typing.TypeVar("_V")
 
 
 class empty:
     """Class to represent missing/empty values."""
 
-    pass
+    def __bool__(self):
+        return False
+
+    def __init_subclass__(cls):
+        raise TypeError("empty cannot be subclassed.")
+
+    def __new__(cls):
+        raise TypeError("empty cannot be instantiated.")
 
 
 class undefined:
     """Class to represent an undefined type."""
 
-    pass
+    def __init_subclass__(cls):
+        raise TypeError("undefined cannot be subclassed.")
+
+    def __new__(cls):
+        raise TypeError("undefined cannot be instantiated.")
 
 
-_T = typing.TypeVar("_T")
-_P = ParamSpec("_P")
-_R = typing.TypeVar("_R")
-_V = typing.TypeVar("_V")
-FieldValidator: typing.TypeAlias = typing.Callable[[_V, typing.Optional[_R]], _V]
-DefaultFactory = typing.Callable[[], _T]
+_FieldValidator: typing.TypeAlias = typing.Callable[
+    [
+        typing.Union[typing.Any, _T],
+        typing.Optional[typing.Union[typing.Any, "FieldBase[_T]"]],
+        typing.Optional[typing.Union[typing.Any, "FieldBase[_V]"]],
+    ],
+    None,
+]
+"""Field validator type alias. 
+Args: value, field_instance, instance
+"""
+DefaultFactory = typing.Callable[[], typing.Union[_T, typing.Any]]
+"""Type alias for default value factories."""
 
 
-class FieldError(DataError, ValueError):
-    """Exception raised for field-related errors."""
-
-    pass
-
-
-def raiseFieldError(func: typing.Callable[_P, _R]) -> typing.Callable[_P, _R]:
-    """Decorator to catch exceptions and raise a FieldError instead."""
-
-    @functools.wraps(func)
-    def wrapper(*args: _P.args, **kwargs: _P.kwargs) -> _R:
-        try:
-            return func(*args, **kwargs)
-        except FieldError:
-            raise
-        except Exception as exc:
-            raise FieldError(exc) from exc
-
-    return wrapper
+def _is_type(o: typing.Any) -> bool:
+    """Check if an object is a type."""
+    if is_iterable(o):
+        return all(isinstance(obj, type) for obj in o)
+    return isinstance(o, type)
 
 
-class FieldMeta(type):
-    """Metaclass for Field types"""
+def _prep_values(
+    values: typing.Iterable[typing.Any],
+) -> typing.Union[typing.Set[typing.Any], typing.Tuple[typing.Any, ...]]:
+    """Prepare values for comparison."""
+    if not is_iterable(values, exclude=(str, bytes)):
+        raise TypeError("values must be an iterable.")
 
-    def __new__(meta_cls, name, bases, attrs):
-        new_cls = super().__new__(meta_cls, name, bases, attrs)
-        meta_cls.clean_null_values(new_cls)
-        meta_cls.clean_blank_values(new_cls)
+    try:
+        return frozenset(values)
+    except TypeError:
+        return values
+
+
+class FieldBaseMeta(type):
+    def __new__(cls, name, bases, attrs):
+        new_cls = super().__new__(cls, name, bases, attrs)
+        new_cls._nulls = _prep_values(new_cls.null_values)  # type: ignore
+        new_cls._blanks = _prep_values(new_cls.blank_values)  # type: ignore
+        new_cls.default_validators = frozenset(
+            validators.load_validators(*new_cls.default_validators)
+        )  # type: ignore
         return new_cls
 
-    @staticmethod
-    def clean_blank_values(cls: "_Field"):
-        blank_values = getattr(cls, "blank_values", None)
-        if blank_values is None:
-            return
 
-        if not is_iterable(blank_values):
-            raise TypeError("Field blank_values must be an iterable.")
-
-        cls.blank_values = tuple(cls._lower_if_string(value) for value in blank_values)
-
-    @staticmethod
-    def clean_null_values(cls: "_Field"):
-        null_values = getattr(cls, "null_values", None)
-        if null_values is None:
-            return
-
-        if not is_iterable(null_values):
-            raise TypeError("Field null_values must be an iterable.")
-
-        cls.null_values = tuple(cls._lower_if_string(value) for value in null_values)
-
-
-class Field(typing.Generic[_T], metaclass=FieldMeta):
+class FieldBase(typing.Generic[_T], metaclass=FieldBaseMeta):
     """Attribute descriptor for enforcing type validation and constraints."""
 
-    default_validators: FieldValidator = ()
-    default_blank_values = ("",)
-    blank_values = ()
-    default_null_values = (None,)
-    null_values = ()
-
-    __valuestore__: str = "__dict__"
-    """Name of the attribute used to store field values on the instance."""
+    default_validators: typing.Iterable[_FieldValidator[_T, typing.Any]] = []
+    blank_values = {
+        "",
+    }
+    null_values = {
+        None,
+    }
+    _blanks: typing.Union[
+        typing.FrozenSet[typing.Any], typing.Tuple[typing.Any, ...]
+    ] = frozenset()
+    _nulls: typing.Union[
+        typing.FrozenSet[typing.Any], typing.Tuple[typing.Any, ...]
+    ] = frozenset()
 
     def __init__(
         self,
+<<<<<<< HEAD
         type_: typing.Type[_T],
+=======
+<<<<<<< HEAD
+        type_: typing.Union[
+            typing.Type[_T], typing.Type[undefined], typing.Tuple[typing.Type[_T], ...]
+        ],
+=======
+        type_: typing.Type[_T],
+>>>>>>> a03e649 (Update to django modules)
+>>>>>>> 6ff9da08d3b2e8b60f10eaeb094b8cace4ea168a
         *,
+        lazy: bool = False,
         alias: typing.Optional[str] = None,
         allow_null: bool = False,
         allow_blank: bool = True,
         required: bool = False,
-        validators: typing.Optional[
-            typing.Iterable[FieldValidator[_T, "_Field"]]
-        ] = None,
-        default: typing.Union[_T, DefaultFactory, typing.Type[empty]] = empty,
-        onsetvalue: typing.Optional[typing.Callable[[typing.Any], typing.Any]] = None,
+        validators: typing.Optional[typing.Iterable[_FieldValidator[_T, _V]]] = None,
+        default: typing.Union[_T, DefaultFactory[_T], typing.Type[empty]] = empty,
+        on_setattr: typing.Optional[typing.Callable[[typing.Any], typing.Any]] = None,
     ):
         """
         Initialize the field.
 
         :param type_: The expected type for field values.
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+        :param alias: Alternative name for the field, defaults to None.
+=======
+>>>>>>> 6ff9da08d3b2e8b60f10eaeb094b8cace4ea168a
         :param alias: Optional string for alternative field naming, defaults to None.
+>>>>>>> a03e649 (Update to django modules)
         :param allow_null: If True, permits None values, defaults to False.
         :param allow_blank: If True, permits blank values, defaults to True.
         :param required: If True, field values must be explicitly provided, defaults to False.
@@ -142,29 +162,61 @@ class Field(typing.Generic[_T], metaclass=FieldMeta):
             Validators should be callables that accept the field value and the optional field instance as arguments.
             NOTE: Values returned from the validators are not used, but they should raise a FieldError if the value is invalid.
         :param default: A default value for the field to be used if no value is set, defaults to empty.
-        :param onsetvalue: Callable to run on the value before setting it, defaults to None.
+        :param on_setattr: Callable to run on the value before setting it, defaults to None.
             Use this to modify the value before it is validated and set on the instance.
         """
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+        self.type_ = type_
+        self._lazy = lazy
+=======
+>>>>>>> 6ff9da08d3b2e8b60f10eaeb094b8cace4ea168a
         if not self._object_is_type(type_):
             raise TypeError(f"Specified type '{type_}' is not a valid type.")
 
         self.type_ = type_
+<<<<<<< HEAD
+=======
+>>>>>>> a03e649 (Update to django modules)
+>>>>>>> 6ff9da08d3b2e8b60f10eaeb094b8cace4ea168a
         self.alias = alias
         self.allow_null = allow_null
         self.allow_blank = allow_blank
         self.required = required
-        self.validators = list(validators or [])
+        self._validators = list(validators or [])
         self._default = default
         self._parent = None
         self._name = None
+        self.on_setattr = on_setattr
+        self._init_args = ()
+        self._init_kwargs = {}
+        self._pending = {}
+        self._values = {}
 
-        if onsetvalue and not callable(onsetvalue):
-            raise TypeError("onsetvalue must be a callable.")
-        self._onsetvalue = onsetvalue
+    def post_init_validate(self):
+        """
+        Validate the field after initialization.
 
-        if self.required and default is not empty:
+        This method is called after the field is initialized to perform additional validation
+        to ensure that the field is correctly configured.
+        """
+        if not _is_type(self.type_):
+            raise TypeError(f"Specified type '{self.type_}' is not a valid type.")
+
+        for validator in self.validators:
+            if not callable(validator):
+                raise TypeError(f"Field validator '{validator}' is not callable.")
+
+        if self.on_setattr and not callable(self.on_setattr):
+            raise TypeError("on_setattr must be a callable.")
+
+        no_default = self._default is empty
+        if self.required and not no_default:
             raise FieldError("A default value is not necessary when required=True")
 
+<<<<<<< HEAD
+=======
         default_value = self.get_default()
         if default_value is not empty:
             if self.allow_null and self.is_null(default_value):
@@ -175,44 +227,33 @@ class Field(typing.Generic[_T], metaclass=FieldMeta):
                 )
         return
 
+>>>>>>> a03e649 (Update to django modules)
     def __new__(cls, *args, **kwargs):
         instance = super().__new__(cls)
         instance._init_args = args
         instance._init_kwargs = kwargs
-
-        # Setup the valuestore for the instance
-        valuestore = getattr(instance, cls.__valuestore__, None)
-        if valuestore is None:
-            setattr(instance, cls.__valuestore__, {})
         return instance
 
-    @staticmethod
-    def _object_is_type(object: object) -> bool:
-        """Check if an object is a type."""
-        if is_iterable(object):
-            return all(isinstance(obj, type) for obj in object)
-        return isinstance(object, type)
+    @typing.overload
+    def get_name(self, raise_no_name: bool = True) -> str: ...
 
-    @property
-    def __values__(self) -> typing.Dict[str, typing.Any]:
-        """Return the field values store for the instance."""
-        valuestore = getattr(self, type(self).__valuestore__, {})
-        return valuestore
+    @typing.overload
+    def get_name(self, raise_no_name: bool = False) -> typing.Optional[str]: ...
 
-    @__values__.setter
-    def __values__(self, value):
-        setattr(self, type(self).__valuestore__, value)
-
-    def get_name(self, raise_no_name: bool = True) -> typing.Optional[str]:
+    def get_name(
+        self, raise_no_name: bool = True
+    ) -> typing.Union[str, typing.Optional[str]]:
         """Get the effective name of the field."""
-        name = self.alias or self._name
-
+        name = self._name or self.alias
         if raise_no_name and name is None:
             raise FieldError(
                 f"{type(self).__name__} has no name. Ensure it has been bound to a parent class or provide an alias."
             )
         return name
 
+<<<<<<< HEAD
+    @functools.cached_property
+=======
     def get_type(self) -> typing.Union[typing.Type[_T], typing.Type[undefined]]:
         """Return the expected type for field values."""
         return self.type_
@@ -231,228 +272,344 @@ class Field(typing.Generic[_T], metaclass=FieldMeta):
         self._validators = value
 
     @validators.deleter
+>>>>>>> a03e649 (Update to django modules)
     def validators(self):
-        self._validators = []
+        """Return the set of field validators."""
+        return frozenset(
+            [
+                *validators.load_validators(*self._validators),
+                *type(self).default_validators,
+            ]
+        )
 
-    def get_default(self) -> _T:
+    def get_default(self) -> typing.Union[_T, typing.Type[empty]]:
         """Return the default value for the field."""
         if self._default is empty:
             return empty
 
         if callable(self._default):
-            return self._default()
+            return self._default()  # type: ignore
         return self._default
 
     def __set_name__(
         self,
-        owner: typing.Type["_Field"],
+        owner: typing.Type[FieldBase],
         name: str,
     ):
         """Assign the field name when the descriptor is initialized on the class."""
-        if not issubclass(owner, Field):
-            raise TypeError(
-                f"{type(self).__name__} must be defined within a Field subclass."
-            )
-
         self.bind(owner, name)
 
-    @raiseFieldError
+    @typing.overload
     def __get__(
         self,
-        instance: typing.Optional["_Field"],
-        owner: typing.Optional[typing.Type["_Field"]],
-    ):
+        instance: FieldBase,
+        owner: typing.Optional[typing.Type[FieldBase]],
+    ) -> typing.Union[_T, typing.Any]: ...
+
+    @typing.overload
+    def __get__(
+        self,
+        instance: typing.Optional[FieldBase],
+        owner: typing.Type[FieldBase],
+    ) -> Self: ...
+
+    def __get__(
+        self,
+        instance: typing.Optional[FieldBase],
+        owner: typing.Optional[typing.Type[FieldBase]],
+    ) -> typing.Union[_T, typing.Any, Self]:
         """Retrieve the field value from an instance or return the default if unset."""
         if instance is None:
             return self
 
-        field_name = self.get_name()
-        value: _T = instance.__values__.get(field_name, self.get_default())
-        if value is empty:
+        try:
+            return self.getvalue(instance)
+        except KeyError as exc:
             raise FieldError(
-                f"'{type(instance).__name__}.{field_name}' has no defined value. Provide a default or set required=True."
-            )
-        return value
+                f"'{type(instance).__name__}.{self.get_name()}' has no defined value. Provide a default or set required=True."
+            ) from exc
 
-    @raiseFieldError
-    def __set__(self, instance: "_Field", value: typing.Any):
-        """Set and validate the field value on an instance."""
+    def getvalue(self, instance: FieldBase) -> typing.Union[_T, typing.Any]:
         field_name = self.get_name()
-        if value is empty:
+
+        values = instance._values
+        if field_name not in values:
+            value = instance._pending[field_name]
+            self.setvalue(instance, value, validate=True)
+        return values[field_name]
+
+    def __set__(self, instance: FieldBase, value: typing.Any):
+        """Set and validate the field value on an instance."""
+        _value = value
+        if self.on_setattr:
+            _value = self.on_setattr(value)
+
+        if _value is empty:
             if self.required:
                 raise FieldError(
-                    f"'{type(instance).__name__}.{field_name}' is a required field."
+                    f"'{type(instance).__name__}.{self.get_name()}' is a required field."
                 )
             return
 
-        if callable(self._onsetvalue):
-            value = self._onsetvalue(value)
+        validate = not self._lazy
+        self.setvalue(instance, _value, validate)
+
+    def setvalue(self, instance: FieldBase, value: typing.Any, validate: bool = True):
+        field_name = self.get_name()
+
+        if not validate:
+            if isinstance(value, Field) and not value.is_bound():
+                value.bind(type(self), self._name)
+            instance._pending[field_name] = value
+            instance._values.pop(field_name, None)
+            return
 
         validated_value = self.validate(value, instance)
-        if isinstance(validated_value, Field) and not validated_value.is_bound():
+        if isinstance(validated_value, FieldBase) and not validated_value.is_bound():
             validated_value.bind(type(self), self._name)
-        instance.__values__[field_name] = validated_value
 
+<<<<<<< HEAD
+        instance._values[field_name] = validated_value
+        instance._pending.pop(field_name, None)
+
+    from helpers.generics.utils.profiling import timeit
+
+    def check_type(
+        self, value: typing.Any
+    ) -> typing.TypeGuard[typing.Union[_T, typing.Any]]:
+        """Optimized type checking with caching"""
+=======
     def check_type(self, value: typing.Any) -> typing.TypeGuard[_T]:
         """Check if the value is of the expected type."""
+<<<<<<< HEAD
+=======
+>>>>>>> a03e649 (Update to django modules)
+>>>>>>> 6ff9da08d3b2e8b60f10eaeb094b8cace4ea168a
         if self.type_ is undefined:
             return True
         return isinstance(value, self.type_)
 
     def bind(
         self,
-        parent: typing.Optional[typing.Type["_Field"]],
-        name: str,
-    ):
+        parent: typing.Optional[typing.Type[FieldBase]],
+        name: typing.Optional[str],
+    ) -> Self:
         """
         Bind the field to a parent class, assign the field name, etc.
         """
-        if parent is not None and not issubclass(parent, Field):
-            raise TypeError(
-                f"{type(self).__name__} can only be bound to a Field subclass."
-            )
-
         self._name = name
         self._parent = parent
         return self
 
     def is_bound(self) -> bool:
         """Return True if the field is bound to a parent class."""
-        if self._parent is None:
-            return False
-        return issubclass(self._parent, Field) and self._name is not None
+        return bool(self._parent and issubclass(self._parent, FieldBase) and self._name)
 
-    @raiseFieldError
-    def validate(self, value: typing.Any, instance: typing.Optional["_Field"]) -> _T:
+    def validate(
+        self, value: typing.Any, instance: typing.Optional[FieldBase]
+    ) -> typing.Optional[_T]:
         """
-        Ensure the value meets field requirements and validation criteria.
+        Casts the value to the field's type, validates it, and runs any field validators.
 
         Override/extend this method to add custom validation logic.
         """
-        field_name = self.get_name()
         if self.is_null(value):
-            if not self.allow_null:
-                raise FieldError(
-                    f"'{field_name}' is not nullable but got null value '{value}'."
-                )
-            return None
-
-        casted_value = self.cast_to_type(value)
-        if self.is_blank(casted_value):
-            if not self.allow_blank:
-                raise FieldError(
-                    f"'{field_name}' cannot be blank but got blank value '{casted_value}'."
-                )
-
-        if not self.check_type(casted_value):
+            if self.allow_null:
+                return None
             raise FieldError(
+<<<<<<< HEAD
                 f"'{field_name}' must be of type/form '{self._repr_type(self.type_)}', not '{type(casted_value).__name__}'."
+=======
+<<<<<<< HEAD
+                f"'{self.get_name()}' is not nullable but got null value '{value}'."
+=======
+                f"'{field_name}' must be of type/form '{self._repr_type(self.type_)}', not '{type(casted_value).__name__}'."
+>>>>>>> a03e649 (Update to django modules)
+>>>>>>> 6ff9da08d3b2e8b60f10eaeb094b8cace4ea168a
             )
 
-        self.run_validators(casted_value, instance)
-        return casted_value
+        if self.is_blank(value):
+            if self.allow_blank:
+                # Return the value as is if it is blank
+                return value
+            raise FieldError(
+                f"'{self.get_name()}' cannot be blank but got blank value '{value}'."
+            )
 
-    def __delete__(self, instance: "_Field"):
         try:
-            instance.__values__.pop(self.get_name())
-        except (KeyError, FieldError):
+            if self.check_type(value):
+                casted = value
+            else:
+                casted = self.cast_to_type(value)
+            validated = self.run_validators(casted, instance)
+        except (ValueError, TypeError) as exc:
+            raise FieldError(str(exc), self.get_name()) from exc
+
+        return validated
+
+    def run_validators(
+        self,
+        value: typing.Union[_T, typing.Any],
+        instance: typing.Optional[FieldBase],
+    ):
+        """Run all field validators on the provided value."""
+        for validator in self.validators:
+            validator(value, self, instance)
+        return value
+
+    def __delete__(self, instance: FieldBase):
+        try:
+            del instance._values[self.get_name()]
+        except KeyError:
             # Ignore if the field value is not set
-            # or has not been bound to a parent class
             pass
 
     # Allow generic typing checking for fields.
     def __class_getitem__(cls, *args, **kwargs):
         return cls
 
-    def cast_to_type(self, value: typing.Any) -> _T:
+    def cast_to_type(self, value: typing.Any) -> typing.Union[_T, typing.Any]:
         """
         Cast the value to the field's specified type, if necessary.
 
         Converts the field's value to the specified type before it is set on the instance.
         """
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+        if self.check_type(value):
+=======
+>>>>>>> 6ff9da08d3b2e8b60f10eaeb094b8cace4ea168a
         field_type = self.type_
         if issubclass(field_type, undefined) or isinstance(value, field_type):
             # If the value is a field, use a copy of the field to avoid shared state.
             if isinstance(value, Field):
                 return copy.deepcopy(value)
+>>>>>>> a03e649 (Update to django modules)
             return value
+        return self.type_(value)  # type: ignore
 
-        return field_type(value)
-
-    def is_blank(self, value: _T) -> bool:
+    def is_blank(self, value: typing.Union[_T, typing.Any]) -> bool:
         """
         Return True if the value is blank, else False.
         """
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+        blanks = type(self)._blanks
+        if not blanks:
+            return False
+
+        try:
+            return value in blanks
+        except TypeError:
+            return value in list(blanks)
+=======
+>>>>>>> 6ff9da08d3b2e8b60f10eaeb094b8cace4ea168a
         if _lower_if_string(value) in [
             *type(self).default_blank_values,
             *type(self).blank_values,
         ]:
             return True
         return False
+>>>>>>> a03e649 (Update to django modules)
 
     def is_null(self, value: typing.Any) -> bool:
         """
         Return True if the value is null, else False.
         """
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+        nulls = type(self)._nulls
+        if not nulls:
+            return False
+=======
+>>>>>>> 6ff9da08d3b2e8b60f10eaeb094b8cace4ea168a
         if _lower_if_string(value) in [
             *type(self).default_null_values,
             *type(self).null_values,
         ]:
             return True
         return False
+>>>>>>> a03e649 (Update to django modules)
 
-    def run_validators(self, value: _T, instance: "_Field"):
-        """Run all field validators on the provided value."""
-        for validator in self.validators:
-            if getattr(validator, "requires_instance", False):
-                validator(value, instance)
-            else:
-                validator(value)
-        return
+        try:
+            return value in nulls
+        except TypeError:
+            return value in list(nulls)
 
-    def to_json(self, instance: "_Field") -> typing.Any:
+    def to_json(self, instance: FieldBase) -> typing.Any:
         """
         Return a JSON serializable representation of the field's value on the instance.
         """
         field_name = self.get_name()
-        value = getattr(instance, field_name)
-        if isinstance(value, Field):
-            value = value.to_json(self)
+        value = self.__get__(instance, owner=type(instance))
 
         try:
-            return json.loads(json.dumps(value))
+            if isinstance(value, Field):
+                return value.to_json(self)
+            return value
         except (TypeError, ValueError) as exc:
             raise FieldError(
-                f"Failed to serialize '{type(instance).__name__}.{field_name}' to JSON. "
-                "Consider implementing a custom json method or using a supported type."
+                f"Failed to serialize '{type(instance).__name__}.{field_name}'. ",
+                field_name,
             ) from exc
 
     @staticmethod
+<<<<<<< HEAD
     def _repr_type(type_: typing.Type) -> str:
+=======
+<<<<<<< HEAD
+    def _repr_type(
+        type_: typing.Union[
+            typing.Type[typing.Any], typing.Tuple[typing.Type[typing.Any]]
+        ],
+    ) -> str:
+=======
+    def _repr_type(type_: typing.Type) -> str:
+>>>>>>> a03e649 (Update to django modules)
+>>>>>>> 6ff9da08d3b2e8b60f10eaeb094b8cace4ea168a
         """Return a string representation of the field type."""
         if isinstance(type_, typing._SpecialForm):
             return type_._name
 
+<<<<<<< HEAD
         if is_generic_type(type_):
             return f"{type_.__origin__.__name__}[{' | '.join([Field._repr_type(arg) for arg in typing.get_args(type_)])}]"
 
         if is_iterable(type_):
             return " | ".join([Field._repr_type(arg) for arg in type_])
         return type_.__name__
+=======
+<<<<<<< HEAD
+        if is_iterable(type_):
+            return " | ".join([Field._repr_type(arg) for arg in type_])
 
-    @staticmethod
-    def _lower_if_string(value: _R) -> _R:
-        if isinstance(value, str):
-            return value.lower()
-        return value
+        if is_generic_type(type_):
+            return f"{type_.__origin__.__name__}[{' | '.join([Field._repr_type(arg) for arg in typing.get_args(type_)])}]"
+=======
+        if is_generic_type(type_):
+            return f"{type_.__origin__.__name__}[{' | '.join([Field._repr_type(arg) for arg in typing.get_args(type_)])}]"
+>>>>>>> 6ff9da08d3b2e8b60f10eaeb094b8cace4ea168a
 
-    NO_DEEPCOPY_ARGS: typing.Tuple[int] = ()
+        if is_iterable(type_):
+            return " | ".join([Field._repr_type(arg) for arg in type_])
+        return type_.__name__
+>>>>>>> a03e649 (Update to django modules)
+
+        return type_.__name__
+
+    NO_DEEPCOPY_ARGS: typing.Set[int] = {}
     """
     Indices of arguments that should not be deepcopied when copying the field.
 
     This is useful for arguments that are immutable or should not be copied to avoid shared state.
     """
-    NO_DEEPCOPY_KWARGS: typing.Tuple[str] = ("validators", "regex")
+    NO_DEEPCOPY_KWARGS: typing.Set[str] = {
+        "validators",
+        "regex",
+    }
     """
     Names of keyword arguments that should not be deepcopied when copying the field.
 
@@ -477,9 +634,9 @@ class Field(typing.Generic[_T], metaclass=FieldMeta):
             for key, value in self._init_kwargs.items()
         }
         field_copy = self.__class__(*args, **kwargs)
-        field_copy.__values__ = merge_dicts(
-            field_copy.__values__,
-            copy.deepcopy(self.__values__, memo),
+        field_copy._values = merge_mappings(
+            field_copy._values,
+            copy.deepcopy(self._values, memo),
         )
 
         if self.is_bound():
@@ -487,25 +644,89 @@ class Field(typing.Generic[_T], metaclass=FieldMeta):
         return field_copy
 
 
-_Field = typing.TypeVar("_Field", bound=Field, covariant=True)
+_Field_co = typing.TypeVar("_Field_co", bound=FieldBase, covariant=True)
 
 
-class FieldInitKwargs(typing.TypedDict):
+def _get_fields(cls: typing.Type) -> typing.Dict[str, FieldBase]:
+    fields = {}
+    for key, value in cls.__dict__.items():
+        if isinstance(value, FieldBase):
+            fields[key] = value
+    return fields
+
+
+class FieldMeta(FieldBaseMeta):
+    """Metaclass for Field types"""
+
+    def __new__(cls, name, bases, attrs):
+        fields = {}
+        for key, value in attrs.items():
+            if isinstance(value, FieldBase):
+                value.post_init_validate()
+                fields[key] = value
+
+        def _by_name(item: typing.Tuple[str, FieldBase]) -> str:
+            return item[1]._name or item[0]
+
+        for cls_ in bases:
+            for c in cls_.mro()[:-1]:
+                if issubclass(c, FieldBase) and hasattr(c, "__fields__"):
+                    fields.update(c.__fields__)  # type: ignore
+                else:
+                    found_fields = _get_fields(c)
+                    if not found_fields:
+                        continue
+
+                    for key, field in found_fields.items():
+                        field.post_init_validate()
+                        fields[key] = field
+
+        sort_fields = attrs.get("sort_fields", True)
+        if sort_fields:
+            if callable(sort_fields):
+                sort_key = sort_fields
+            else:
+                sort_key = _by_name
+            fields = dict(sorted(fields.items(), key=sort_key))
+
+        # Make read-only to prevent accidental modification
+        attrs["__fields__"] = MappingProxyType(fields)
+        return super().__new__(cls, name, bases, attrs)
+
+
+class Field(FieldBase[_T], metaclass=FieldMeta):
+    """Attribute descriptor for enforcing type validation and constraints."""
+
+    sort_fields: typing.Union[
+        bool, typing.Callable[[typing.Tuple[str, FieldBase]], typing.Any]
+    ] = True
+    """
+    If True, sort the fields by name (in ascending order) on class initialization.
+
+    If a callable is provided, it will be used to sort the fields.
+
+    Useful if you need the field data to be loaded in a specific order on serialization/deserialization.
+    """
+
+
+class FieldInitKwargs(typing.Generic[_T], typing.TypedDict, total=False):
     """Possible keyword arguments for initializing a field."""
 
     alias: typing.Optional[str]
     """Optional string for alternative field naming."""
+    lazy: bool
+    """If True, the field will not be validated until it is accessed."""
     allow_null: bool
     """If True, permits the field to be set to None."""
     allow_blank: bool
     """If True, permits the field to be set to a blank value."""
     required: bool
     """If True, the field must be explicitly provided."""
-    validators: typing.Optional[typing.Iterable[FieldValidator[_T, _Field]]]
+    validators: typing.Optional[typing.Iterable[_FieldValidator[_T, FieldBase]]]
     """A list of validation functions to apply to the field's value."""
     default: typing.Union[_T, DefaultFactory, typing.Type[empty]]
     """A default value for the field to be used if no value is set."""
-    onsetvalue: typing.Optional[typing.Callable[[typing.Any], typing.Any]]
+    on_setattr: typing.Optional[typing.Callable[[typing.Any], typing.Any]]
     """
     Callable to run on the value before setting it. 
     
@@ -516,7 +737,7 @@ class FieldInitKwargs(typing.TypedDict):
 class AnyField(Field[typing.Any]):
     """Field for handling values of any type."""
 
-    def __init__(self, **kwargs: Unpack[FieldInitKwargs]):
+    def __init__(self, **kwargs: Unpack[FieldInitKwargs[typing.Any]]):
         kwargs.setdefault("allow_null", True)
         super().__init__(type_=undefined, **kwargs)
 
@@ -524,36 +745,54 @@ class AnyField(Field[typing.Any]):
 class BooleanField(Field[bool]):
     """Field for handling boolean values."""
 
-    TRUTHY_VALUES = (
+    TRUTHY_VALUES = {
         True,
         1,
         "1",
-        "true",
-        "yes",
-    )
-    FALSY_VALUES = (
+        iexact("true"),
+        iexact("yes"),
+    }
+    FALSY_VALUES = {  # Use sets for faster lookups
         False,
         0,
         "0",
-        "false",
-        "no",
-        "nil",
-        "null",
-        "none",
-    )
+        iexact("false"),
+        iexact("no"),
+        iexact("nil"),
+        iexact("null"),
+        iexact("none"),
+    }
 
-    def __init__(self, **kwargs: Unpack[FieldInitKwargs]):
+    def __init__(self, **kwargs: Unpack[FieldInitKwargs[bool]]):
         kwargs.setdefault("allow_null", True)
         super().__init__(type_=bool, **kwargs)
 
     def cast_to_type(self, value: typing.Any):
+<<<<<<< HEAD
         if _lower_if_string(value) in self.TRUTHY_VALUES:
             return True
         if _lower_if_string(value) in self.FALSY_VALUES:
+=======
+<<<<<<< HEAD
+        if self.check_type(value):
+            return value
+
+        if value in type(self).TRUTHY_VALUES:
+            return True
+        if value in type(self).FALSY_VALUES:
+=======
+        if _lower_if_string(value) in self.TRUTHY_VALUES:
+            return True
+        if _lower_if_string(value) in self.FALSY_VALUES:
+>>>>>>> a03e649 (Update to django modules)
+>>>>>>> 6ff9da08d3b2e8b60f10eaeb094b8cace4ea168a
             return False
         return bool(value)
 
 
+<<<<<<< HEAD
+@typing.no_type_check
+=======
 class StringField(Field[str]):
     """Field for handling string values."""
 
@@ -595,9 +834,12 @@ class StringField(Field[str]):
         return str(value)
 
 
+>>>>>>> a03e649 (Update to django modules)
 class MinMaxValueMixin(typing.Generic[_T]):
     def __init__(
         self,
+        type_: typing.Type[_T],
+        *,
         min_value: typing.Optional[_T] = None,
         max_value: typing.Optional[_T] = None,
         **kwargs,
@@ -609,43 +851,151 @@ class MinMaxValueMixin(typing.Generic[_T]):
         :param max_value: The maximum value allowed for the field.
         :param kwargs: Additional keyword arguments for the field.
         """
-        super().__init__(**kwargs)
-        if min_value is not None and max_value is not None and min_value > max_value:
-            raise ValueError("min_value cannot be greater than max_value")
+        super().__init__(type_=type_, **kwargs)
         self.min_value = min_value
         self.max_value = max_value
+        if self.min_value:
+            self._validators.append(validators.gte(self.min_value))
+        if self.max_value:
+            self._validators.append(validators.lte(self.max_value))
 
-    def validate(self, value: typing.Any, instance: typing.Optional["_Field"]) -> _T:
-        validated_value = super().validate(value, instance)
-        if validated_value is None:
-            return None
-
-        field_name = self.get_name()
-        if self.min_value is not None and validated_value < self.min_value:
-            raise FieldError(
-                f"'{field_name}' cannot be less than '{self.min_value}' but '{validated_value}' was provided."
-            )
-        if self.max_value is not None and validated_value > self.max_value:
-            raise FieldError(
-                f"'{field_name}' cannot be greater than '{self.max_value}' but '{validated_value}' was provided."
-            )
-        return validated_value
+    def post_init_validate(self):
+        super().post_init_validate()
+        if (
+            self.min_value is not None
+            and self.max_value is not None
+            and self.min_value > self.max_value
+        ):
+            raise FieldError("min_value cannot be greater than max_value")
 
 
-class FloatField(MinMaxValueMixin, Field[float]):
+class FloatField(MinMaxValueMixin[float], Field[float]):
     """Field for handling float values."""
 
-    def __init__(self, **kwargs: Unpack[FieldInitKwargs]):
+    min_value = Field(float, allow_null=True, required=True)
+    max_value = Field(float, allow_null=True, required=True)
+
+    def __init__(
+        self,
+        *,
+        min_value: typing.Optional[float] = None,
+        max_value: typing.Optional[float] = None,
+        **kwargs: Unpack[FieldInitKwargs[float]],
+    ):
         kwargs["allow_blank"] = False  # Floats cannot be blank
+<<<<<<< HEAD
         super().__init__(type_=float, **kwargs)
+=======
+<<<<<<< HEAD
+        super().__init__(
+            type_=float,
+            min_value=min_value,
+            max_value=max_value,
+            **kwargs,
+        )
+=======
+        super().__init__(type_=float, **kwargs)
+>>>>>>> a03e649 (Update to django modules)
+>>>>>>> 6ff9da08d3b2e8b60f10eaeb094b8cace4ea168a
 
 
-class IntegerField(MinMaxValueMixin, Field[int]):
+class IntegerField(MinMaxValueMixin[int], Field[int]):
     """Field for handling integer values."""
 
-    def __init__(self, **kwargs: Unpack[FieldInitKwargs]):
+    min_value = Field(int, allow_null=True, required=True)
+    max_value = Field(int, allow_null=True, required=True)
+
+    def __init__(
+        self,
+        *,
+        min_value: typing.Optional[int] = None,
+        max_value: typing.Optional[int] = None,
+        **kwargs: Unpack[FieldInitKwargs[int]],
+    ):
         kwargs["allow_blank"] = False  # Integers cannot be blank
+<<<<<<< HEAD
         super().__init__(type_=int, **kwargs)
+=======
+<<<<<<< HEAD
+        super().__init__(
+            type_=int,
+            min_value=min_value,
+            max_value=max_value,
+            **kwargs,
+        )
+
+
+class StringField(Field[str]):
+    """Field for handling string values."""
+
+    DEFAULT_MIN_LENGTH: typing.Optional[int] = None
+    """Default minimum length of values."""
+    DEFAULT_MAX_LENGTH: typing.Optional[int] = None
+    """Default maximum length of values."""
+
+    min_length = IntegerField(allow_null=True, validators=[validators.gte(0)])
+    max_length = IntegerField(allow_null=True, validators=[validators.gte(0)])
+    to_lowercase = BooleanField()
+    to_uppercase = BooleanField()
+
+    def __init__(
+        self,
+        *,
+        min_length: typing.Optional[int] = None,
+        max_length: typing.Optional[int] = None,
+        trim_whitespaces: bool = True,
+        to_lowercase: bool = False,
+        to_uppercase: bool = False,
+        **kwargs: Unpack[FieldInitKwargs[str]],
+    ):
+        """
+        Initialize the field.
+
+        :param min_length: The minimum length allowed for the field's value.
+        :param max_length: The maximum length allowed for the field's value.
+        :param trim_whitespaces: If True, leading and trailing whitespaces will be removed.
+        :param kwargs: Additional keyword arguments for the field.
+        """
+        super().__init__(type_=str, **kwargs)
+        self.min_length = min_length or type(self).DEFAULT_MIN_LENGTH
+        self.max_length = max_length or type(self).DEFAULT_MAX_LENGTH
+        if self.min_length:
+            self._validators.append(validators.min_len(self.min_length))
+        if self.max_length:
+            self._validators.append(validators.max_len(self.max_length))
+
+        self.trim_whitespaces = trim_whitespaces
+        self.to_lowercase = to_lowercase
+        self.to_uppercase = to_uppercase
+
+    def post_init_validate(self):
+        super().post_init_validate()
+        if (
+            self.min_length is not None
+            and self.max_length is not None
+            and self.min_length > self.max_length
+        ):
+            raise ValueError("min_length cannot be greater than max_length")
+
+        if self.to_lowercase and self.to_uppercase:
+            raise FieldError("`to_lowercase` and `to_uppercase` cannot both be truthy")
+
+    def cast_to_type(self, value: typing.Any):
+        if self.check_type(value):
+            return value
+
+        casted = str(value)
+        if self.trim_whitespaces:
+            casted = casted.strip()
+        if self.to_lowercase:
+            return casted.lower()
+        if self.to_uppercase:
+            return casted.upper()
+        return casted
+=======
+        super().__init__(type_=int, **kwargs)
+>>>>>>> a03e649 (Update to django modules)
+>>>>>>> 6ff9da08d3b2e8b60f10eaeb094b8cace4ea168a
 
 
 class DictField(Field[typing.Dict]):
@@ -655,14 +1005,21 @@ class DictField(Field[typing.Dict]):
         {},
     ]
 
-    def __init__(self, **kwargs: Unpack[FieldInitKwargs]):
+    def __init__(self, **kwargs: Unpack[FieldInitKwargs[typing.Dict]]):
         super().__init__(dict, **kwargs)
 
 
 class UUIDField(Field[uuid.UUID]):
     """Field for handling UUID values."""
 
+<<<<<<< HEAD
+    def __init__(self, **kwargs: Unpack[FieldInitKwargs[uuid.UUID]]):
+=======
     def __init__(self, **kwargs: Unpack[FieldInitKwargs]):
+<<<<<<< HEAD
+=======
+>>>>>>> a03e649 (Update to django modules)
+>>>>>>> 6ff9da08d3b2e8b60f10eaeb094b8cace4ea168a
         super().__init__(type_=uuid.UUID, **kwargs)
 
     def cast_to_type(self, value: typing.Any):
@@ -670,13 +1027,25 @@ class UUIDField(Field[uuid.UUID]):
             return value
         return uuid.UUID(value)
 
-    def to_json(self, instance: "_Field") -> str:
-        value: uuid.UUID = getattr(instance, self.get_name())
+    def to_json(self, instance: FieldBase) -> str:
+        value = self.__get__(instance, owner=type(instance))
         return str(value)
 
 
-class BaseListField(Field[_T]):
-    """Base class for list/iterable fields with optional validation of list elements."""
+def _on_set_child(value: typing.Union[typing.Any, Field[_V]]):
+    if isinstance(value, Field):
+        return copy.deepcopy(value)
+    return value
+
+
+@typing.no_type_check
+class IterFieldBase(typing.Generic[_V, _T]):
+    """Mixin for iterable fields."""
+
+    blank_values = [[], tuple(), set()]
+
+    child = Field(Field[_V], on_setattr=_on_set_child)
+    size = IntegerField(allow_null=True, validators=[validators.gt(0)])
 
     def __init__(
         self,
@@ -684,14 +1053,22 @@ class BaseListField(Field[_T]):
         child: typing.Optional[Field[_V]] = None,
         *,
         size: typing.Optional[int] = None,
-        **kwargs: Unpack[FieldInitKwargs],
+        **kwargs: Unpack[FieldInitKwargs[_T]],
     ):
         """
         Initialize the field.
 
+<<<<<<< HEAD
         :param type_: The expected list/iterable type for the field.
+=======
+<<<<<<< HEAD
+        :param type_: The expected iterable type for the field.
+=======
+        :param type_: The expected list/iterable type for the field.
+>>>>>>> a03e649 (Update to django modules)
+>>>>>>> 6ff9da08d3b2e8b60f10eaeb094b8cace4ea168a
         :param child: Optional field for validating elements in the field's value.
-        :param size: Optional size constraint for the list/iterable.
+        :param size: Optional size constraint for the iterable.
         """
         if not is_iterable_type(type_, exclude=(str, bytes)):
             raise TypeError(
@@ -699,60 +1076,104 @@ class BaseListField(Field[_T]):
             )
         super().__init__(type_=type_, **kwargs)
 
-        if not isinstance(child, Field):
-            raise TypeError("child must be a Field")
-
-        # Copy the child field to avoid shared state
-        self.child = copy.deepcopy(child) if child else AnyField()
-        # Bind the child field to the parent field
-        self.child.bind(type(self), "child")
+        self.child = child or AnyField()
         self.size = size
+        if self.size:
+            self._validators.append(validators.max_len(self.size))
 
-    def validate(self, value: typing.Any, instance: typing.Optional["_Field"]):
-        validated_value = super().validate(value, instance)
+    def validate(
+        self, value: typing.Any, instance: typing.Optional["_Field_co"]
+    ) -> typing.Optional[_T]:
+        validated_value: typing.Optional[_T] = super().validate(value, instance)
+        if not validated_value:
+            return validated_value
+
+        return type(validated_value)(
+            self.child.validate(item, instance)
+            for item in validated_value  # type: ignore
+        )
+
+    def check_type(self, value: typing.Any) -> bool:
+        if not super().check_type(value):
+            return False
+
+        if value and self.child.type_ is not undefined:
+            for item in value:
+                if not self.child.check_type(item):
+                    return False
+        return True
+
+    def cast_to_type(self, value: typing.Any):
+        # Cast container to the expected type first
+        casted = super().cast_to_type(value)
+        if self.child.type_ is undefined:
+            return casted
+
+        # Then, cast each element in the container to the child field's type
+        return type(casted)(
+            (item if self.child.check_type(item) else self.child.cast_to_type(item))
+            for item in casted
+        )
+
+    def to_json(self, instance: FieldBase) -> typing.Optional[typing.List[typing.Any]]:
+        value = self.__get__(instance, owner=type(instance))
         if value is None:
             return None
-
-        if self.size is not None and len(validated_value) != self.size:
-            raise FieldError(
-                f"'{self.get_name()}' must contain exactly {self.size} items."
-            )
-        return [self.child.validate(item, instance) for item in validated_value]
-
-    def to_json(self, instance: "_Field"):
-        value: typing.List[_T] = getattr(instance, self.get_name())
         return [
             (item.to_json(self) if isinstance(item, Field) else item) for item in value
         ]
 
 
-class ListField(BaseListField[typing.List]):
+class ListField(IterFieldBase[_V, typing.List[_V]], Field[typing.List[_V]]):
     """Field for lists, with optional validation of list elements through the `child` field."""
 
-    blank_values = [
-        [],
-    ]
-
     def __init__(
         self,
         child: typing.Optional[Field[_V]] = None,
-        **kwargs: Unpack[FieldInitKwargs],
+        *,
+        size: typing.Optional[int] = None,
+        **kwargs: Unpack[FieldInitKwargs[typing.List[_V]]],
     ):
+<<<<<<< HEAD
         super().__init__(type_=list, child=child, **kwargs)
+=======
+<<<<<<< HEAD
+        super().__init__(type_=list, child=child, size=size, **kwargs)
+=======
+        super().__init__(type_=list, child=child, **kwargs)
+>>>>>>> a03e649 (Update to django modules)
+>>>>>>> 6ff9da08d3b2e8b60f10eaeb094b8cace4ea168a
 
 
-class SetField(BaseListField[typing.Set]):
+class SetField(IterFieldBase[_V, typing.Set[_V]], Field[typing.Set[_V]]):
     """Field for sets, with optional validation of set elements through the `child` field."""
 
-    blank_values = [
-        set(),
-    ]
+    def __init__(
+        self,
+        child: typing.Optional[Field[_V]] = None,
+        *,
+        size: typing.Optional[int] = None,
+        **kwargs: Unpack[FieldInitKwargs[typing.Set[_V]]],
+    ):
+        super().__init__(type_=set, child=child, size=size, **kwargs)
+
+
+class TupleField(IterFieldBase[_V, typing.Tuple[_V]], Field[typing.Tuple[_V]]):
+    """Field for tuples, with optional validation of tuple elements through the `child` field."""
 
     def __init__(
         self,
         child: typing.Optional[Field[_V]] = None,
-        **kwargs: Unpack[FieldInitKwargs],
+        *,
+        size: typing.Optional[int] = None,
+        **kwargs: Unpack[FieldInitKwargs[typing.Tuple[_V]]],
     ):
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+        super().__init__(type_=tuple, child=child, size=size, **kwargs)
+=======
+>>>>>>> 6ff9da08d3b2e8b60f10eaeb094b8cace4ea168a
         super().__init__(type_=set, child=child, **kwargs)
 
     def validate(
@@ -785,15 +1206,18 @@ class TupleField(BaseListField[typing.Tuple]):
             return None
 
         return tuple(super().validate(value, instance))
+>>>>>>> a03e649 (Update to django modules)
 
 
 class DecimalField(Field[decimal.Decimal]):
     """Field for handling decimal values."""
 
+    dp = IntegerField(allow_null=True)
+
     def __init__(
         self,
         dp: typing.Optional[int] = None,
-        **kwargs: Unpack[FieldInitKwargs],
+        **kwargs: Unpack[FieldInitKwargs[decimal.Decimal]],
     ):
         """
         Initialize the field.
@@ -802,95 +1226,149 @@ class DecimalField(Field[decimal.Decimal]):
         :param kwargs: Additional keyword arguments for the field.
         """
         super().__init__(type_=decimal.Decimal, **kwargs)
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+        self.dp = dp
+=======
+>>>>>>> 6ff9da08d3b2e8b60f10eaeb094b8cace4ea168a
         self.dp = None if dp is None else int(dp)
+>>>>>>> a03e649 (Update to django modules)
 
     def cast_to_type(self, value):
-        value = decimal.Decimal(value)
-        if self.dp:
-            return value.quantize(decimal.Decimal(f"0.{'0'*(self.dp - 1)}1"))
-        return value
+        if self.check_type(value):
+            return value
 
-    def to_json(self, instance: _Field) -> str:
-        value: decimal.Decimal = getattr(instance, self.get_name())
+        casted = decimal.Decimal(value)
+        if self.dp:
+            return casted.quantize(decimal.Decimal(f"0.{'0'*(self.dp - 1)}1"))
+        return casted
+
+    def to_json(self, instance: FieldBase) -> str:
+        value = self.__get__(instance, owner=type(instance))
         return str(value)
+
+
+_email_validator = validators.pattern(
+    r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$",
+    message="'{name}' must be a valid email address.",
+)
+_email_validator.requires_context = True
 
 
 class EmailField(StringField):
     """Field for handling email addresses."""
 
-    EMAIL_REGEX = r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
+    default_validators = (_email_validator,)
 
-    def validate(self, value: typing.Any, instance: typing.Optional["_Field"]) -> str:
-        validated_value = super().validate(value, instance)
-        if validated_value is None:
-            return None
-
-        if not re.match(type(self).EMAIL_REGEX, validated_value):
-            raise FieldError(f"'{self.get_name()}' must be a valid email address.")
-        return validated_value
+    def __init__(
+        self,
+        *,
+        min_length=None,
+        max_length=None,
+        trim_whitespaces=True,
+        to_lowercase=True,  # Field prefers to store email values in lowercase
+        to_uppercase=False,
+        **kwargs,
+    ):
+        super().__init__(
+            min_length=min_length,
+            max_length=max_length,
+            trim_whitespaces=trim_whitespaces,
+            to_lowercase=to_lowercase,
+            to_uppercase=to_uppercase,
+            **kwargs,
+        )
 
 
 class URLField(Field[Url]):
     """Field for handling URL values."""
 
+<<<<<<< HEAD
+    def __init__(self, **kwargs: Unpack[FieldInitKwargs[Url]]):
+        super().__init__(type_=Url, **kwargs)
+=======
     def __init__(self, **kwargs: Unpack[FieldInitKwargs]):
         super().__init__(type_=(str, Url), **kwargs)
+<<<<<<< HEAD
+=======
+>>>>>>> a03e649 (Update to django modules)
+>>>>>>> 6ff9da08d3b2e8b60f10eaeb094b8cace4ea168a
 
     def cast_to_type(self, value: typing.Any):
-        if isinstance(value, Url):
+        if self.check_type(value):
             return value
-        return parse_url(value)
+        return parse_url(str(value))
+
+    def to_json(self, instance: FieldBase) -> str:
+        value = self.__get__(instance, owner=type(instance))
+        return str(value)
 
 
-class ChoiceMixin(typing.Generic[_T]):
-    """Mixin for choice fields."""
+class ChoiceFieldBase(typing.Generic[_T]):
+    """Mixin base for choice fields."""
 
-    def __init__(self, choices: typing.List[_T], **kwargs):
+    choices = ListField(
+        required=True, allow_blank=False, validators=[validators.min_len(2)]
+    )
+
+    @typing.no_type_check
+    def __init__(self, choices: typing.List[_T], **kwargs: Unpack[FieldInitKwargs[_T]]):
         super().__init__(**kwargs)
-
-        if len(choices) < 2:
-            raise ValueError("Two or more choices are required")
         self.choices = choices
 
-    def validate(self, value: typing.Any, instance: typing.Optional["_Field"]):
+    @typing.no_type_check
+    def validate(
+        self, value: typing.Any, instance: typing.Optional["_Field_co"]
+    ) -> typing.Optional[_T]:
         value = super().validate(value, instance)
+        if value is None:
+            return None
+
         if value not in self.choices:
-            raise FieldError(f"'{self.get_name()}' must be one of {self.choices}.")
+            raise FieldError(f"'{self.get_name()}' must be one of {self.choices!r}.")
         return value
 
 
-class ChoiceField(ChoiceMixin, AnyField):
+class ChoiceField(ChoiceFieldBase, AnyField):
     """Field for with predefined choices for values."""
 
     pass
 
 
-class StringChoiceField(ChoiceMixin, StringField):
+class StringChoiceField(ChoiceFieldBase[str], StringField):
     """String field with predefined choices for values."""
 
     pass
 
 
-class IntegerChoiceField(ChoiceMixin, IntegerField):
+class IntegerChoiceField(ChoiceFieldBase[int], IntegerField):
     """Integer field with predefined choices for values."""
 
     pass
 
 
-class FloatChoiceField(ChoiceMixin, FloatField):
+class FloatChoiceField(ChoiceFieldBase[float], FloatField):
     """Float field with predefined choices for values."""
 
     pass
 
 
-class TypedChoiceField(ChoiceMixin, Field[_T]):
+class TypedChoiceField(ChoiceFieldBase[_T], Field[_T]):
     """Choice field with defined type enforcement."""
 
     def __init__(
         self,
         type_: typing.Type[_T],
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+        *,
+=======
+>>>>>>> a03e649 (Update to django modules)
+>>>>>>> 6ff9da08d3b2e8b60f10eaeb094b8cace4ea168a
         choices: typing.List[_T],
-        **kwargs: Unpack[FieldInitKwargs],
+        **kwargs: Unpack[FieldInitKwargs[_T]],
     ):
         """
         Initialize the field.
@@ -898,100 +1376,180 @@ class TypedChoiceField(ChoiceMixin, Field[_T]):
         :param type_: The expected type for choice field's values.
         :param choices: A list of valid choices for the field.
         """
+<<<<<<< HEAD
         super().__init__(type_=type_, choices=choices, **kwargs)
+=======
+<<<<<<< HEAD
+        super().__init__(choices=choices, type_=type_, **kwargs)  # type: ignore
+=======
+        super().__init__(type_=type_, choices=choices, **kwargs)
+>>>>>>> a03e649 (Update to django modules)
+>>>>>>> 6ff9da08d3b2e8b60f10eaeb094b8cace4ea168a
 
 
-class JSONField(AnyField):
+_DEFAULT_JSON_TYPES = (dict, list, str, int, float, bool, NoneType)
+
+
+class JSONField(Field[typing.Union[dict, list, str, int, float, bool, NoneType]]):
     """Field for handling JSON data."""
 
-    def cast_to_type(self, value: typing.Any) -> typing.Any:
-        if isinstance(value, str):
-            return json.loads(value)
-        return json.loads(json.dumps(value))
+    JSON_TYPES = _DEFAULT_JSON_TYPES
+
+    def __init__(
+        self,
+        **kwargs: Unpack[
+            FieldInitKwargs[typing.Union[dict, list, str, int, float, bool, NoneType]]
+        ],
+    ):
+        super().__init__(type_=type(self).JSON_TYPES, **kwargs)
+
+    def cast_to_type(self, value: typing.Any):
+        if self.check_type(value):
+            return value
+        return json.dumps(value)
+
+    def to_json(self, instance: FieldBase):
+        value = self.__get__(instance, owner=type(instance))
+        if value is None:
+            return None
+
+        if self.check_type(value):
+            return value
+        return json.loads(value)
+
+
+_hex_color_validator = validators.pattern(
+    r"^#(?:[0-9a-fA-F]{3,4}){1,2}$",
+    message="'{name}' must be a valid hex color code.",
+)
+
+_hex_color_validator.requires_context = True
 
 
 class HexColorField(StringField):
     """Field for handling hex color values."""
 
-    HEX_COLOR_REGEX = r"^#(?:[0-9a-fA-F]{3,4}){1,2}$"
-    DEFAULT_MAX_LENGTH = 9
+    # DEFAULT_MIN_LENGTH = 4
+    # DEFAULT_MAX_LENGTH = 9
+    default_validators = (_hex_color_validator,)
 
-    def validate(self, value: typing.Any, instance: typing.Optional["_Field"]):
-        validated_value = super().validate(value, instance)
-        if validated_value is None:
-            return None
 
-        if not re.match(type(self).HEX_COLOR_REGEX, validated_value):
-            raise FieldError(f"'{self.get_name()}' must be a valid hex color code.")
-        return validated_value
+_rgb_color_validator = validators.pattern(
+    r"^rgb[a]?\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*(?:,\s*(\d{1,3})\s*)?\)$",
+    message="'{name}' must be a valid RGB color code.",
+)
+_rgb_color_validator.requires_context = True
 
 
 class RGBColorField(StringField):
     """Field for handling RGB color values."""
 
-    RGB_COLOR_REGEX = r"^rgb[a]?\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*(?:,\s*(\d{1,3})\s*)?\)$"
-    DEFAULT_MAX_LENGTH = 38
+    # DEFAULT_MAX_LENGTH = 38
+    default_validators = (_rgb_color_validator,)
 
-    def validate(self, value: typing.Any, instance: typing.Optional["_Field"]):
-        validated_value = super().validate(value, instance)
-        if validated_value is None:
-            return None
+    def __init__(
+        self,
+        *,
+        min_length=None,
+        max_length=None,
+        trim_whitespaces=True,
+        **kwargs,
+    ):
+        # Field enforces lowercase for RGB color values
+        kwargs["to_lowercase"] = True
+        kwargs["to_uppercase"] = False
+        super().__init__(
+            min_length=min_length,
+            max_length=max_length,
+            trim_whitespaces=trim_whitespaces,
+            **kwargs,
+        )
 
-        validated_value = validated_value.lower().strip()
-        if not re.match(type(self).RGB_COLOR_REGEX, validated_value):
-            raise FieldError(f"'{self.get_name()}' must be a valid RGB color code.")
-        return validated_value
+
+_hsl_color_validator = validators.pattern(
+    r"^hsl[a]?\(\s*(\d{1,3})\s*,\s*(\d{1,3})%?\s*,\s*(\d{1,3})%?\s*(?:,\s*(\d{1,3})\s*)?\)$",
+    message="'{name}' must be a valid HSL color code.",
+)
+_hsl_color_validator.requires_context = True
 
 
 class HSLColorField(StringField):
     """Field for handling HSL color values."""
 
-    HSL_COLOR_REGEX = r"^hsl[a]?\(\s*(\d{1,3})\s*,\s*(\d{1,3})%?\s*,\s*(\d{1,3})%?\s*(?:,\s*(\d{1,3})\s*)?\)$"
-    DEFAULT_MAX_LENGTH = 40
+    # DEFAULT_MAX_LENGTH = 40
+    default_validators = (_hsl_color_validator,)
 
-    def validate(self, value: typing.Any, instance: typing.Optional["_Field"]):
-        validated_value = super().validate(value, instance)
-        if validated_value is None:
-            return None
-
-        validated_value = validated_value.lower().strip()
-        if not re.match(type(self).HSL_COLOR_REGEX, validated_value):
-            raise FieldError(f"'{self.get_name()}' must be a valid HSL color code.")
-        return validated_value
-
-
-class IPAddressField(Field[typing.Union[ipaddress.IPv4Address, ipaddress.IPv6Address]]):
-    """Field for hanling IP addresses."""
-
-    def __init__(self, **kwargs: Unpack[FieldInitKwargs]):
+    def __init__(
+        self,
+        *,
+        min_length=None,
+        max_length=None,
+        trim_whitespaces=True,
+        **kwargs,
+    ):
+        # Field enforces lowercase for HSL color values
+        kwargs["to_lowercase"] = True
+        kwargs["to_uppercase"] = False
         super().__init__(
+<<<<<<< HEAD
             type_=(str, ipaddress.IPv4Address, ipaddress.IPv6Address), **kwargs
+=======
+<<<<<<< HEAD
+            min_length=min_length,
+            max_length=max_length,
+            trim_whitespaces=trim_whitespaces,
+            **kwargs,
+=======
+            type_=(str, ipaddress.IPv4Address, ipaddress.IPv6Address), **kwargs
+>>>>>>> a03e649 (Update to django modules)
+>>>>>>> 6ff9da08d3b2e8b60f10eaeb094b8cace4ea168a
         )
 
-    def cast_to_type(self, value: typing.Any):
-        return ipaddress.ip_address(value)
 
-    def to_json(self, instance: "_Field") -> str:
-        """Return a JSON representation of the field's value."""
-        value: typing.Union[ipaddress.IPv4Address, ipaddress.IPv6Address] = getattr(
-            instance, self.get_name()
-        )
-        return value.exploded
+_slug_validator = validators.pattern(
+    r"^[a-zA-Z0-9_-]+$",
+    message="'{name}' must be a valid slug.",
+)
+_slug_validator.requires_context = True
 
 
 class SlugField(StringField):
     """Field for URL-friendly strings."""
 
-    def validate(self, value: typing.Any, instance: typing.Optional["_Field"]):
-        validated_value = super().validate(value, instance)
-        if validated_value is None:
+    default_validators = (_slug_validator,)
+
+
+class IPAddressField(Field[typing.Union[ipaddress.IPv4Address, ipaddress.IPv6Address]]):
+    """Field for hanling IP addresses."""
+
+    def __init__(
+        self,
+        **kwargs: Unpack[
+            FieldInitKwargs[typing.Union[ipaddress.IPv4Address, ipaddress.IPv6Address]]
+        ],
+    ):
+        super().__init__(type_=(ipaddress.IPv4Address, ipaddress.IPv6Address), **kwargs)
+
+    def cast_to_type(self, value: typing.Any):
+        if self.check_type(value):
+            return value
+        return ipaddress.ip_address(value)
+
+    def to_json(self, instance: FieldBase):
+        """Return a JSON representation of the field's value."""
+        value = self.__get__(instance, owner=type(instance))
+        if value is None:
             return None
-
-        if not re.match(r"^[a-zA-Z0-9_-]+$", validated_value):
-            raise FieldError(f"'{self.get_name()}' must be a valid slug.")
-        return validated_value
+        return value.exploded
 
 
+<<<<<<< HEAD
+def _parse_duration(s, /) -> datetime.timedelta:
+    duration = parse_duration(s)
+    if duration is None:
+        raise ValueError(f"Invalid duration value - {s}")
+    return duration
+=======
 # These next datetime fields are implemented with dependencies on Django.
 # Warning messages are displayed when the fields are initialized
 # without the required dependencies installed.
@@ -1105,164 +1663,352 @@ class TimeField(Field[datetime.time]):
     def to_json(self, instance: "_Field") -> str:
         value: datetime.time = getattr(instance, self.get_name())
         return value.strftime(self.output_format)
+>>>>>>> a03e649 (Update to django modules)
 
 
 class DurationField(Field[datetime.timedelta]):
     """Field for handling duration values."""
 
+<<<<<<< HEAD
+    parser = Field[typing.Callable[[str], datetime.timedelta]](
+        undefined, allow_null=False, validators=[validators.is_callable]
+    )
+=======
     def __init__(self, **kwargs: Unpack[FieldInitKwargs]):
         super().__init__(type_=(str, datetime.timedelta), **kwargs)
+<<<<<<< HEAD
+=======
+>>>>>>> a03e649 (Update to django modules)
+>>>>>>> 6ff9da08d3b2e8b60f10eaeb094b8cace4ea168a
 
-    def parse_duration(self, value: str) -> datetime.timedelta:
-        """
-        Parse the duration string into a timedelta object.
-
-        Override this method to implement custom duration parsing logic.
-        """
-        parsed_duration = parse_duration(value)
-        if parsed_duration is None:
-            raise ValueError(f"Invalid duration value - {value}")
-        return parsed_duration
+    def __init__(
+        self,
+        parser: typing.Optional[typing.Callable[[str], datetime.timedelta]] = None,
+        **kwargs: Unpack[FieldInitKwargs[datetime.timedelta]],
+    ):
+        super().__init__(type_=datetime.timedelta, **kwargs)
+        self.parser = parser or _parse_duration
 
     def cast_to_type(self, value: typing.Any) -> datetime.timedelta:
-        if isinstance(value, datetime.timedelta):
+        if self.check_type(value):
             return value
 
         if not isinstance(value, str):
-            raise ValueError(f"Invalid duration value - {value}")
+            raise FieldError(f"Invalid duration value - {value}")
 
-        return self.parse_duration(value)
+        try:
+            return self.parser(value)
+        except ValueError as exc:
+            raise FieldError(f"Invalid duration value - {value}") from exc
 
-    def to_json(self, instance: "_Field") -> str:
-        value: datetime.timedelta = getattr(instance, self.get_name())
+    def to_json(self, instance: FieldBase) -> typing.Optional[str]:
+        value = self.__get__(instance, owner=type(instance))
+        if value is None:
+            return None
         return str(value)
 
 
 TimeDeltaField = DurationField
 
 
-class DateTimeField(Field[datetime.datetime]):
-    """Field for handling datetime values."""
+class TimeZoneField(Field[datetime.tzinfo]):
+    """Field for handling timezone values."""
 
-    DEFAULT_OUTPUT_FORMAT = "%Y-%m-%d %H:%M:%S%z"
+    def __init__(self, **kwargs: Unpack[FieldInitKwargs[datetime.tzinfo]]):
+        super().__init__(type_=datetime.tzinfo, **kwargs)
+
+    def cast_to_type(self, value: typing.Any):
+        if self.check_type(value):
+            return value
+        return zoneinfo.ZoneInfo(value)
+
+    def to_json(self, instance: FieldBase) -> str:
+        value = self.__get__(instance, owner=type(instance))
+        return str(value)
+
+
+DatetimeStr = str
+DatetimeFormat = str
+DatetimeParser = typing.Callable[
+    [
+        DatetimeStr,
+        typing.Optional[typing.Union[DatetimeFormat, typing.Iterable[DatetimeFormat]]],
+    ],
+    datetime.datetime,
+]
+
+
+@typing.no_type_check
+class DateTimeFieldBase(typing.Generic[_T]):
+    """Mixin base for datetime fields."""
+
+    DEFAULT_OUTPUT_FORMAT: str = "%Y-%m-%d %H:%M:%S%z"
+
+    input_formats = SetField(
+        child=StringField(allow_null=False, allow_blank=False),
+        allow_null=True,
+        allow_blank=False,
+    )
+    output_format = StringField(allow_null=True, allow_blank=False)
+    parser = Field[DatetimeParser](
+        undefined, allow_null=False, validators=[validators.is_callable]
+    )
 
     def __init__(
         self,
-        input_format: typing.Optional[str] = None,
+        type_: typing.Type[_T],
+        *,
+        input_formats: typing.Optional[typing.Iterable[str]] = None,
         output_format: typing.Optional[str] = None,
-        tz: typing.Optional[datetime.tzinfo] = None,
-        **kwargs: Unpack[FieldInitKwargs],
+        parser: typing.Optional[DatetimeParser] = None,
+        **kwargs: Unpack[FieldInitKwargs[_T]],
     ):
         """
         Initialize the field.
 
-        :param input_format: The expected input format for the datetime value.
+        :param input_formats: Possible expected input format (ISO or RFC) for the date value.
+            If not provided, the field will attempt to parse the date value
+            itself, which may be slower.
+
+        :param output_format: The preferred output format for the date value.
+        :param parser: A custom parser function for parsing the date value.
+            Serialization speed of field will be dependent on the parser function.
+            The parse should take a string and an optional format string or list of formats.
+
+        :param kwargs: Additional keyword arguments for the field.
+        """
+        super().__init__(type_=type_, **kwargs)
+        self.input_formats = input_formats
+        self.output_format = output_format or type(self).DEFAULT_OUTPUT_FORMAT
+        self.parser = parser or iso_parse
+
+    def cast_to_type(self, value: typing.Any) -> typing.Union[_T, typing.Any]:
+        if self.check_type(value):
+            return value
+
+        if not isinstance(value, str):
+            raise FieldError(f"Invalid value - {value}")
+
+        try:
+            return self.parser(value, self.input_formats)
+        except ValueError as exc:
+            raise FieldError(f"Invalid value - {value}") from exc
+
+    def to_json(self, instance: FieldBase) -> typing.Optional[str]:
+        value = self.__get__(instance, owner=type(instance))
+        if value is None:
+            return None
+        return value.strftime(self.output_format)
+
+
+class DateField(DateTimeFieldBase[datetime.date], Field[datetime.date]):
+    """Field for handling date values."""
+
+    DEFAULT_OUTPUT_FORMAT = "%Y-%m-%d"
+
+    def __init__(
+        self,
+        *,
+        input_formats: typing.Optional[typing.Iterable[str]] = None,
+        output_format: typing.Optional[str] = None,
+        parser: typing.Optional[DatetimeParser] = None,
+        **kwargs: Unpack[FieldInitKwargs[datetime.date]],
+    ):
+        """
+        Initialize the field.
+
+        :param input_formats: Possible expected input format (ISO or RFC) for the date value.
+            If not provided, the field will attempt to parse the date value
+            itself, which may be slower.
+
+        :param output_format: The preferred output format for the date value.
+        :param parser: A custom parser function for parsing the date value.
+            Serialization speed of field will be dependent on the parser function.
+            The parse should take a string and an optional format string or list of formats.
+
+        :param kwargs: Additional keyword arguments for the field.
+        """
+        super().__init__(
+            type_=datetime.date,
+            input_formats=input_formats,
+            output_format=output_format,
+            parser=parser,
+            **kwargs,
+        )
+
+
+class TimeField(DateTimeFieldBase[datetime.date], Field[datetime.time]):
+    """Field for handling time values."""
+
+    DEFAULT_OUTPUT_FORMAT = "%H:%M:%S.%s"
+
+    def __init__(
+        self,
+        *,
+        input_formats: typing.Optional[typing.Iterable[str]] = None,
+        output_format: typing.Optional[str] = None,
+        parser: typing.Optional[DatetimeParser] = None,
+        **kwargs: Unpack[FieldInitKwargs[datetime.time]],
+    ):
+        """
+        Initialize the field.
+
+        :param input_format: Possible expected input format (ISO or RFC) for the time value.
+            If not provided, the field will attempt to parse the time value
+            itself, which may be slower.
+
+        :param output_format: The preferred output format for the time value.
+        :param parser: A custom parser function for parsing the time value.
+            Serialization speed of field will be dependent on the parser function.
+        :param kwargs: Additional keyword arguments for the field.
+        """
+        super().__init__(
+            type_=datetime.time,
+            input_formats=input_formats,
+            output_format=output_format,
+            parser=parser,
+            **kwargs,
+        )
+
+
+class DateTimeField(DateTimeFieldBase[datetime.datetime], Field[datetime.datetime]):
+    """Field for handling datetime values."""
+
+    DEFAULT_OUTPUT_FORMAT = "%Y-%m-%d %H:%M:%S%z"
+
+    tz = TimeZoneField(allow_null=True)
+
+    def __init__(
+        self,
+        *,
+        input_formats: typing.Optional[typing.Iterable[str]] = None,
+        output_format: typing.Optional[str] = None,
+        tz: typing.Optional[datetime.tzinfo] = None,
+        parser: typing.Optional[DatetimeParser] = None,
+        **kwargs: Unpack[FieldInitKwargs[datetime.datetime]],
+    ):
+        """
+        Initialize the field.
+
+        :param input_format: Possible expected input format (ISO or RFC) for the datetime value.
             If not provided, the field will attempt to parse the datetime value
-            itself.
+            itself, which may be slower.
+
         :param output_format: The preferred output format for the datetime value.
         :param tz: The timezone to use for the datetime value. If this set,
             the datetime value will be represented in this timezone.
+
+        :param parser: A custom parser function for parsing the datetime value.
+            Serialization speed of field will be dependent on the parser function.
         :param kwargs: Additional keyword arguments for the field.
         """
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+        super().__init__(
+            type_=datetime.datetime,
+            input_formats=input_formats,
+            output_format=output_format,
+            parser=parser,
+            **kwargs,
+        )
+=======
+>>>>>>> 6ff9da08d3b2e8b60f10eaeb094b8cace4ea168a
         super().__init__(type_=(str, datetime.datetime), **kwargs)
         self.input_format = input_format
         self.output_format = output_format or type(self).DEFAULT_OUTPUT_FORMAT
+>>>>>>> a03e649 (Update to django modules)
         self.tz = tz
 
-    def parse_datetime(self, value: str) -> datetime.datetime:
-        """
-        Parse the datetime string into a datetime object.
-
-        Override this method to implement custom datetime parsing logic.
-        """
-        if self.input_format:
-            return datetime.datetime.strptime(value, self.input_format)
-
-        deps_required({"dateutil": "python-dateutil"})
-        from dateutil.parser import parse
-
-        parsed_datetime = parse(value)
-        if parsed_datetime is None:
-            raise ValueError(f"Invalid datetime value - {value}")
-        return parsed_datetime
-
     def cast_to_type(self, value: typing.Any) -> datetime.datetime:
-        if isinstance(value, datetime.datetime):
-            parsed_datetime = value
+        if self.check_type(value):
+            casted = value
         else:
             if not isinstance(value, str):
                 raise FieldError(f"Invalid datetime value - {value}")
-            parsed_datetime = self.parse_datetime(value)
+            try:
+                casted = self.parser(value, self.input_formats)
+            except ValueError as exc:
+                raise FieldError(f"Invalid datetime value - {value}") from exc
 
         if self.tz:
-            if parsed_datetime.tzinfo:
-                parsed_datetime = parsed_datetime.astimezone(self.tz)
+            if casted.tzinfo:
+                casted = casted.astimezone(self.tz)
             else:
-                parsed_datetime = parsed_datetime.replace(tzinfo=self.tz)
-        return parsed_datetime
-
-    def to_json(self, instance: "_Field") -> str:
-        value: datetime.datetime = getattr(instance, self.get_name())
-        return value.strftime(self.output_format)
+                casted = casted.replace(tzinfo=self.tz)
+        return casted
 
 
 class BytesField(Field[bytes]):
     """Field for handling byte values."""
 
-    def __init__(self, str_encoding: str = "UTF-8", **kwargs: Unpack[FieldInitKwargs]):
+    encoding = StringField(allow_null=True, allow_blank=False)
+
+    def __init__(
+        self, encoding: str = "utf-8", **kwargs: Unpack[FieldInitKwargs[bytes]]
+    ):
         """
         Initialize the field.
 
-        :param str_encoding: The encoding to use when encoding/decoding byte strings.
+        :param sencoding: The encoding to use when encoding/decoding byte strings.
         :param kwargs: Additional keyword arguments for the field.
         """
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+        super().__init__(type_=bytes, **kwargs)
+        self.encoding = encoding
+=======
+>>>>>>> 6ff9da08d3b2e8b60f10eaeb094b8cace4ea168a
         super().__init__(type_=(str, bytes), **kwargs)
         self.str_encoding = str_encoding
+>>>>>>> a03e649 (Update to django modules)
 
     def cast_to_type(self, value: typing.Any):
-        if isinstance(value, bytes):
+        if self.check_type(value):
             return value
 
         if isinstance(value, str):
             try:
-                return base64.b64decode(value.encode(encoding=self.str_encoding))
+                return base64.b64decode(value.encode(encoding=self.encoding))
             except (ValueError, TypeError) as exc:
                 raise FieldError("Invalid base64 string for bytes") from exc
-        return value
+        return bytes(value)
 
-    def to_json(self, instance: "_Field") -> str:
+    def to_json(self, instance: FieldBase):
         """Return a JSON representation of the field's value."""
-        value: bytes = getattr(instance, self.get_name())
-        return base64.b64encode(value).decode(encoding=self.str_encoding)
+        value = self.__get__(instance, owner=type(instance))
+        if value is None:
+            return None
+        return base64.b64encode(value).decode(encoding=self.encoding)
 
 
-class IOField(Field[typing.IO]):
+class IOField(Field[io.IOBase]):
     """Field for handling file-like I/O objects."""
 
+<<<<<<< HEAD
+    def __init__(self, **kwargs: Unpack[FieldInitKwargs[io.IOBase]]):
+=======
     def __init__(self, **kwargs: Unpack[FieldInitKwargs]):
+<<<<<<< HEAD
+=======
+>>>>>>> a03e649 (Update to django modules)
+>>>>>>> 6ff9da08d3b2e8b60f10eaeb094b8cace4ea168a
         super().__init__(type_=io.IOBase, **kwargs)
 
-    def validate(self, value: typing.Any, instance: typing.Optional["_Field"]):
-        """Validate that the value is a file-like object."""
-        validated_value = super().validate(value, instance)
-        if validated_value is None:
-            return None
-
-        if not (
-            hasattr(validated_value, "read")
-            and callable(getattr(validated_value, "read"))
-            and hasattr(validated_value, "write")
-            and callable(getattr(validated_value, "write"))
-        ):
-            raise FieldError("The provided object does not support IO operations")
-        return validated_value
-
-    def to_json(self, instance: "_Field"):
+    def to_json(self, instance: FieldBase):
         raise FieldError(f"{type(self).__name__} does not support JSON serialization.")
 
 
-class FileField(IOField):
+class FileField(Field[io.BufferedIOBase]):
     """Field for handling files"""
+
+    max_size = IntegerField(allow_null=True, validators=[validators.gte(0)])
+    allowed_types = SetField(
+        child=StringField(allow_null=False, allow_blank=False, to_lowercase=True),
+        allow_null=True,
+        allow_blank=False,
+    )
 
     def __init__(
         self,
@@ -1277,17 +2023,17 @@ class FileField(IOField):
         :param allowed_types: A list of allowed file types or extensions.
         :param kwargs: Additional keyword arguments for the field.
         """
-        super().__init__(**kwargs)
+        super().__init__(type_=io.BufferedIOBase, **kwargs)
         self.max_size = max_size
         self.allowed_types = allowed_types or []
 
-    def validate(self, value: typing.Any, instance: typing.Optional["_Field"]):
+    def validate(self, value: typing.Any, instance: typing.Optional[FieldBase]):
         """Validate the file object, checking size and type constraints."""
         file_obj = super().validate(value, instance)
         if file_obj is None:
             return None
 
-        if self.max_size is not None:
+        if self.max_size:
             file_obj.seek(0, 2)  # Move to end of file to check size
             file_size = file_obj.tell()
             file_obj.seek(0)  # Reset file pointer to the beginning
@@ -1296,14 +2042,14 @@ class FileField(IOField):
 
         if self.allowed_types:
             # Check if the file has an allowed type or extension
-            if not self.is_allowed_file_type(file_obj):
+            if not self.is_allowed_type(file_obj):
                 raise FieldError(
                     f"File type not allowed. Allowed types: {self.allowed_types}."
                 )
 
         return file_obj
 
-    def is_allowed_file_type(self, file_obj: typing.IO) -> bool:
+    def is_allowed_type(self, file_obj: io.BufferedIOBase) -> bool:
         """Check if the file type or extension is allowed."""
         # Example implementation; in a real scenario, you might want to check MIME types
         # or the file extension based on file name or magic numbers.
@@ -1313,9 +2059,9 @@ class FileField(IOField):
         file_extension = file_name.split(".")[-1].lower()
         if not file_extension:
             return False
-        return file_extension in [ext.lower() for ext in self.allowed_types]
+        return file_extension in self.allowed_types
 
-    def __delete__(self, instance: "_Field"):
+    def __delete__(self, instance: FieldBase):
         """Close the file if it was opened through the field."""
         field_value = self.__get__(instance, type(instance))
         if hasattr(field_value, "close"):
@@ -1362,6 +2108,8 @@ try:
 
         DEFAULT_OUTPUT_FORMAT = PhoneNumberFormat.E164
 
+        output_format = Field(PhoneNumberFormat)
+
         def __init__(
             self,
             output_format: typing.Optional[PhoneNumberFormat] = None,
@@ -1373,11 +2121,19 @@ try:
             :param output_format: The preferred output format for the phone number value.
             :param kwargs: Additional keyword arguments for the field.
             """
+<<<<<<< HEAD
             super().__init__(type_=(str, PhoneNumber), **kwargs)
+=======
+<<<<<<< HEAD
+            super().__init__(type_=PhoneNumber, **kwargs)
+=======
+            super().__init__(type_=(str, PhoneNumber), **kwargs)
+>>>>>>> a03e649 (Update to django modules)
+>>>>>>> 6ff9da08d3b2e8b60f10eaeb094b8cace4ea168a
             self.output_format = output_format or type(self).DEFAULT_OUTPUT_FORMAT
 
         def cast_to_type(self, value: typing.Any):
-            if isinstance(value, PhoneNumber):
+            if self.check_type(value):
                 return value
 
             try:
@@ -1385,14 +2141,18 @@ try:
             except Exception as exc:
                 raise FieldError(f"Invalid phone number - {value}") from exc
 
-        def to_json(self, instance: "_Field"):
-            value: PhoneNumber = getattr(instance, self.get_name())
+        def to_json(self, instance: FieldBase):
+            value = self.__get__(instance, owner=type(instance))
+            if value is None:
+                return None
             return format_number(value, self.output_format)
 
     class PhoneNumberStringField(StringField):
         """Phone number string field"""
 
         DEFAULT_OUTPUT_FORMAT = PhoneNumberFormat.E164
+
+        output_format = Field(PhoneNumberFormat)
 
         def __init__(
             self,
@@ -1405,22 +2165,26 @@ try:
             :param output_format: The preferred output format for the phone number value.
             :param kwargs: Additional keyword arguments for the field.
             """
-            kwargs.setdefault("max_length", 20)
-            super().__init__(**kwargs)
+            super().__init__(max_length=20, **kwargs)
             self.output_format = output_format or type(self).DEFAULT_OUTPUT_FORMAT
 
         def cast_to_type(self, value: typing.Any):
             return format_number(parse(value), self.output_format)
 
-        def to_json(self, instance: "_Field"):
+        def to_json(self, instance: FieldBase):
+            value = self.__get__(instance, owner=type(instance))
+            if value is None or isinstance(value, str):
+                return value
             # The cast_to_type method already does the formatting
-            return self.cast_to_type(getattr(instance, self.get_name()))
+            return self.cast_to_type(value)
 
 except ImportError:
     pass
 
 
 __all__ = [
+    "empty",
+    "undefined",
     "FieldError",
     "Field",
     "FieldInitKwargs",
@@ -1430,14 +2194,13 @@ __all__ = [
     "FloatField",
     "IntegerField",
     "DictField",
-    "BaseListField",
     "ListField",
     "SetField",
     "TupleField",
     "DecimalField",
     "EmailField",
     "URLField",
-    "ChoiceMixin",
+    "ChoiceFieldBase",
     "ChoiceField",
     "StringChoiceField",
     "IntegerChoiceField",
@@ -1459,5 +2222,5 @@ __all__ = [
     "FileField",
     "PhoneNumberField",
     "PhoneNumberStringField",
-    "_Field",
+    "_Field_co",
 ]
