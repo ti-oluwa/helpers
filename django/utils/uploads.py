@@ -1,6 +1,6 @@
-
 import typing
 from pathlib import Path
+from django.conf import settings
 
 from helpers.generics.utils.misc import get_attr_by_traversal_path
 
@@ -23,5 +23,8 @@ def make_upload_directory_for_user(user: str = "id") -> str:
         :param parent_dir: The parent directory of the file, if any.
         """
         user_value = get_attr_by_traversal_path(instance, user)
-        return Path(f"uploads/{user_value}/{parent_dir or ''}/{filename}")
+        return Path(
+            f"{settings.BASE_DIR}/uploads/{user_value}/{parent_dir or ''}/{filename}"
+        )
+
     return upload_dir_for_user
