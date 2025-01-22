@@ -5,6 +5,9 @@ from django.conf import settings
 from helpers.generics.utils.misc import get_attr_by_traversal_path
 
 
+base_dir_str = Path(settings.BASE_DIR).as_posix()
+
+
 def make_upload_directory_for_user(user: str = "id") -> str:
     """
     Factory function for creating an upload directory function for a user.
@@ -24,7 +27,7 @@ def make_upload_directory_for_user(user: str = "id") -> str:
         """
         user_value = get_attr_by_traversal_path(instance, user)
         return Path(
-            f"{settings.BASE_DIR}/uploads/{user_value}/{parent_dir or ''}/{filename}"
-        )
+            f"{base_dir_str}/uploads/{user_value}/{parent_dir or ''}/{filename}"
+        ).as_posix()
 
     return upload_dir_for_user
