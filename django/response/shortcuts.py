@@ -41,8 +41,9 @@ def json_response(
     **kwargs,
 ) -> JsonResponse:
     """Returns a JSON response with a structured payload."""
+    status = Status(status)
     schema = Schema(
-        status=status,
+        status=status.value,
         message=message,
         detail=detail,
         data=data,
@@ -102,11 +103,9 @@ def accepted(
     return success(message, data=data, status_code=202, **kwargs)
 
 
-def no_content(
-    message: str = "No content", data: Union[Dict, List] = None, **kwargs
-) -> JsonResponse:
+def no_content(message: str = "No content", **kwargs) -> JsonResponse:
     """Use when there is no content to return."""
-    return success(message, data=data, status_code=204, **kwargs)
+    return success(message, data=None, status_code=204, **kwargs)
 
 
 def partial_content(
