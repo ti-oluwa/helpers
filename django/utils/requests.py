@@ -21,10 +21,10 @@ def parse_query_params_from_request(
     if request.method != "POST":
         return request.GET.dict()
 
-    query_param_pattern = (
+    query_param_pattern = re.compile(
         r"&?(?P<param_name>[a-zA-Z0-9-_\s]+)=(?P<param_value>[a-zA-Z0-9-_/\?=\\\s]+)"
     )
-    request_path: str = request.META.get("HTTP_REFERER", "")
+    request_path: str = request.get_full_path()
     try:
         _, query_params_part = request_path.split("?", maxsplit=1)
         results = re.findall(query_param_pattern, query_params_part)

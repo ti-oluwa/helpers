@@ -12,4 +12,5 @@ def application(request):
         "app_name": app_name,
         "app_alias": app_alias,
         "current_year": timezone.now().year,
+        "settings": settings,
     }
