@@ -18,8 +18,8 @@ def make_upload_directory_for_user(user: str = "id") -> str:
         """
         Upload directory function for a user.
 
-        :param instance: The instance of the model.
-        :param filename: The name of the file being uploaded.
+        :param instance: The instance of the model.a
+        :param filename: The name of the file being uploaded.a
         :param parent_dir: The parent directory of the file, if any.
         """
         user_value = get_attr_by_traversal_path(instance, user)
