@@ -26,8 +26,11 @@ def make_upload_directory_for_user(user: str = "id") -> str:
         :param parent_dir: The parent directory of the file, if any.
         """
         user_value = get_attr_by_traversal_path(instance, user)
-        return Path(
+        # Make sure to use relative paths to avoid issues with SuspiciousFileOperation
+        # exceptions raised by Django when using absolute paths to save files.
+        upload_path = Path(
             f"{base_dir_str}/uploads/{user_value}/{parent_dir or ''}/{filename}"
-        ).as_posix()
+        ).relative_to(base_dir_str).as_posix()
+        return upload_path
 
     return upload_dir_for_user
