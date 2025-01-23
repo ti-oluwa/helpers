@@ -90,7 +90,9 @@ def is_iterable_type(
     return is_iter_type
 
 
-def is_iterable(obj: Any, *, exclude: Optional[Tuple[Type[Any], ...]] = None) -> TypeGuard[collections.abc.Iterable]:
+def is_iterable(
+    obj: Any, *, exclude: Optional[Tuple[Type[Any], ...]] = None
+) -> TypeGuard[collections.abc.Iterable]:
     """Check if an object is an iterable."""
     return is_iterable_type(type(obj), exclude=exclude)
 
@@ -273,7 +275,7 @@ def merge_mappings(
         if isinstance(target[key], collections.abc.Mapping) and isinstance(
             source_value, collections.abc.Mapping
         ):
-            target[key] = merger(target[key], source_value) # type: ignore
+            target[key] = merger(target[key], source_value)  # type: ignore
         else:
             # Otherwise, just override the target value with the source value
             target[key] = source_value
@@ -408,14 +410,22 @@ async def async_batched(
     :yield: Batches of the async iterable as lists.
     """
     batch = []
-    async for item in async_iter:
-        batch.append(item)
-        if len(batch) == batch_size:
-            yield batch
-            batch = []
+    try:
+        async for item in async_iter:
+            batch.append(item)
+            if len(batch) == batch_size:
+                yield batch
+                batch = []
 
-    if batch:
-        yield batch
+        if batch:
+            yield batch
+    finally:
+        # Ensures that the inner async generator is closed 
+        # when the outer async generator is closed.
+        # Since the outer async generator is not yielding
+        # directly from the inner async generator
+        if inspect.isasyncgen(async_iter):
+            await async_iter.aclose()
 
 
 def shift(i: Sequence[T], /, *, step: int = 1) -> Sequence[T]:
