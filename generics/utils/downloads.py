@@ -290,7 +290,7 @@ def download(
 
 
 async def fast_multi_download(
-    urls: typing.Dict[str, typing.Union[str, typing.Tuple[str, typing.Any]]],
+    urls: typing.Dict[str, typing.Union[str, typing.Tuple[str, DownloadHandler[T]]]],
     default_handler: typing.Optional[DownloadHandler[T]] = None,
     config: typing.Optional[DownloadConfig] = None,
     batch_size: int = 10,

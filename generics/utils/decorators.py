@@ -17,7 +17,9 @@ _R_co = typing.TypeVar("_R", covariant=True)
 def retry(
     func: typing.Optional[Function[_P, _R]] = None,
     *,
-    exception_class: type[BaseException] = BaseException,
+    exc_type: typing.Optional[
+        typing.Union[typing.Tuple[BaseException, ...], BaseException]
+    ] = None,
     count: int = 1,
 ) -> typing.Union[
     typing.Callable[[Function[_P, _R]], Function[_P, _R]], Function[_P, _R]
@@ -28,7 +30,9 @@ def retry(
 def retry(
     func: typing.Optional[CoroutineFunction[_P, _R]] = None,
     *,
-    exception_class: type[BaseException] = BaseException,
+    exc_type: typing.Optional[
+        typing.Union[typing.Tuple[BaseException, ...], BaseException]
+    ] = None,
     count: int = 1,
 ) -> typing.Union[
     typing.Callable[[CoroutineFunction[_P, _R]], CoroutineFunction[_P, _R]],
@@ -41,7 +45,9 @@ def retry(
         typing.Union[Function[_P, _R], CoroutineFunction[_P, _R]]
     ] = None,
     *,
-    exception_class: type[BaseException] = BaseException,
+    exc_type: typing.Optional[
+        typing.Union[typing.Tuple[BaseException, ...], BaseException]
+    ] = None,
     count: int = 1,
 ) -> typing.Union[
     typing.Callable[
@@ -56,7 +62,7 @@ def retry(
     after which the exception will be allowed to propagate.
 
     :param func: The function to decorate.
-    :param exception_class: The target exception to catch.
+    :param exc_type: The target exception type(s) to catch.
     :param count: The number of times to retry the function.
     """
 
@@ -69,7 +75,7 @@ def retry(
                 for _ in range(count):
                     try:
                         return await func(*args, **kwargs)
-                    except exception_class as exc:
+                    except exc_type or Exception as exc:
                         log_exception(exc)
                         continue
                 return await func(*args, **kwargs)
@@ -79,7 +85,7 @@ def retry(
                 for _ in range(count):
                     try:
                         return func(*args, **kwargs)
-                    except exception_class as exc:
+                    except exc_type or Exception as exc:
                         log_exception(exc)
                         continue
                 return func(*args, **kwargs)
@@ -109,10 +115,11 @@ class classorinstancemethod(typing.Generic[_T, _P, _R_co]):
     assert instance.example() == instance
     ```
     """
+
     __name__: str
     __qualname__: str
     __doc__: typing.Optional[str]
-    
+
     @property
     def __func__(
         self,

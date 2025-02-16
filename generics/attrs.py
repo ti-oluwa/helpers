@@ -363,6 +363,20 @@ def type_cast(
     :param converter: The cattrs converter instance to register hooks on
     :param cls: The class to register the hooks for (optional, if provided, will register hooks immediately)
     :return: The class with the hooks registered or a decorator function
+
+    Example Usage:
+    ```python
+    import cattrs
+    import attrs
+    
+    converter = cattrs.Converter()
+
+    @type_cast(converter)
+    @attrs.define(auto_attribs=True)
+    class MyClass:
+        name: str
+        age: int
+    ```
     """
     if cls is None:
         return lambda cls: type_cast(converter, cls)

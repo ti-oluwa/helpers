@@ -99,23 +99,23 @@ def timeit(
     ```
     """
     if isinstance(func, str):
-        context_decorator = _timeit(
+        timer = _timeit(
             identifier=func,
             output=output,
             use_perf_counter=use_perf_counter,
         )
         if identifier:
-            return context_decorator(identifier)
-        return context_decorator
+            return timer(identifier)
+        return timer
 
-    context_decorator = _timeit(
+    timer = _timeit(
         identifier=identifier,
         output=output,
         use_perf_counter=use_perf_counter,
     )
     if func:
-        return context_decorator(func)
-    return context_decorator
+        return timer(func)
+    return timer
 
 
 class _Profiler(ContextDecorator):
@@ -218,12 +218,15 @@ def profileit(
     ```
     """
     if isinstance(func, str):
-        return _Profiler(
+        profiler = _Profiler(
             identifier=func,
             output=output,
             timeunit=timeunit,
             builtins=builtins,
         )
+        if identifier:
+            return profiler(identifier)
+        return profiler
 
     profiler = _Profiler(
         identifier=identifier,

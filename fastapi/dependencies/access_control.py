@@ -2,7 +2,6 @@
 HTTP connection and connected user access control dependencies
 """
 
-from calendar import c
 import typing
 import asyncio
 from starlette.requests import HTTPConnection
