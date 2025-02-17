@@ -147,10 +147,10 @@ def password_strength_validator(
     strength = weight / possible_weight
     if strength < min_strength:
         raise ValueError(
-            f"""
+        f"""
         Password is too weak.
 
-        {"\n".join(errors)}
+        {'\n'.join(errors)}
         """
         )
     return value
