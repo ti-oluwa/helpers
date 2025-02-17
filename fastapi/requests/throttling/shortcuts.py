@@ -268,7 +268,7 @@ def get_referrer(connection: _HTTPConnection) -> str:
 
 async def connection_user_agent_identifier(connection: _HTTPConnection) -> str:
     user_agent = connection.headers.get("user-agent", "")
-    return f"{user_agent}:{connection.scope["path"]}"
+    return f"{user_agent}:{connection.scope['path']}"
 
 
 async def anonymous_connection_identifier(connection: _HTTPConnection) -> str:
@@ -287,7 +287,7 @@ async def authenticated_connection_identifier(connection: _HTTPConnection) -> st
 
     pk = getattr(connected_user, "pk", None) or getattr(connected_user, "id", None)
     if pk is not None:
-        identifier = f"{str(pk)}:{connection.scope["path"]}"
+        identifier = f"{str(pk)}:{connection.scope['path']}"
 
     identifier = await default_connection_identifier(connection)
     return f"authenticated:{identifier}"
@@ -320,7 +320,7 @@ def referrer_throttle(
         request_referrer = get_referrer(request)
         if request_referrer not in referrer:
             raise NoLimit()
-        return f"referer:{request_referrer}:{request.scope["path"]}"
+        return f"referer:{request_referrer}:{request.scope['path']}"
 
     return throttle(
         identifier=referrer_identifier,

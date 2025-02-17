@@ -30,7 +30,7 @@ ConnectionThrottledHandler = typing.Callable[
 
 async def default_connection_identifier(connection: _HTTPConnection) -> str:
     client_ip = get_ip_address(connection)
-    return f"{client_ip.exploded}:{connection.scope["path"]}"
+    return f"{client_ip.exploded}:{connection.scope['path']}"
 
 
 async def default_connection_throttled(
