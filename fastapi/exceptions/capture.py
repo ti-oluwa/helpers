@@ -38,6 +38,16 @@ class ExceptionCaptor(BaseExceptionCaptor[BaseException, Response]):
     async def run_async(cls, func, *args, **kwargs):
         return await sync_to_async(func)(*args, **kwargs)
 
+    @typing.overload
+    async def as_dependency(
+        cls_or_self: typing.Type[Self],
+    ) -> typing.AsyncGenerator[Self, None]: ...
+
+    @typing.overload
+    async def as_dependency(
+        cls_or_self: Self,
+    ) -> typing.AsyncGenerator[Self, None]: ...
+
     async def as_dependency(
         cls_or_self: typing.Union[Self, typing.Type[Self]],
     ) -> typing.AsyncGenerator[Self, None]:

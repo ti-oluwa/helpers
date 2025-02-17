@@ -1,6 +1,5 @@
-from ast import TypeVar
 import inspect
-from typing import Any, Callable, Dict, NamedTuple
+from typing import Any, Callable, Dict
 
 
 class _NOT_SET:

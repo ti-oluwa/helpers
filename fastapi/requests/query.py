@@ -1,10 +1,11 @@
 import fastapi
+import pydantic
 import typing
 from annotated_types import Ge, Le
 
 
 Limit = typing.Annotated[
-    int,
+    pydantic.PositiveInt,
     Le(1000),
     Ge(1),
     fastapi.Query(

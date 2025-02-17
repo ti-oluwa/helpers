@@ -29,7 +29,7 @@ Dependency = typing.Union[Function[_Q, _S], CoroutineFunction[_Q, _S]]
 _Throttle = typing.TypeVar("_Throttle", bound=BaseThrottle[_HTTPConnection])
 
 
-class ThrottleKwargs(typing.TypedDict):
+class ThrottleKwargs(typing.TypedDict, total=False):
     """Keyword arguments for creating a throttle"""
 
     limit: int

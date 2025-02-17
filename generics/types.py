@@ -112,7 +112,7 @@ class MappingProxy(collections.abc.Mapping):
 
     def __repr__(self) -> str:
         return (
-            f"{type(self).__name__}{repr(self._wrapped).removeprefix("mappingproxy")}"
+            f"{type(self).__name__}{repr(self._wrapped).removeprefix('mappingproxy')}"
         )
 
     def __iter__(self):
