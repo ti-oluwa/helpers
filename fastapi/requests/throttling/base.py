@@ -21,7 +21,7 @@ ConnectionIdentifier = typing.Union[
     CoroutineFunction[[_HTTPConnection], typing.Any],
 ]
 
-_Args = typing.TypeVarTuple("_Args")
+_Args = typing.Tuple[typing.Any, ...]
 _WaitPeriod = typing.NewType("_WaitPeriod", int)
 ConnectionThrottledHandler = typing.Callable[
     [_HTTPConnection, _WaitPeriod, Unpack[_Args]], typing.Any
