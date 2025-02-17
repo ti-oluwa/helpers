@@ -301,7 +301,7 @@ def capture_input(
             sys.stderr.write(f"Invalid value: {exc}\n")
             sys.stderr.flush()
         except fastapi.exceptions.ValidationException as exc:
-            sys.stderr.write(f"Invalid value: {"\n".join(exc.errors())}\n")
+            sys.stderr.write("Invalid value: " + "\n".join(exc.errors()) + "\n")
             sys.stderr.flush()
         else:
             return value
