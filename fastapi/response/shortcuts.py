@@ -1,6 +1,7 @@
 from enum import StrEnum
 from typing import Any, List, Dict, Optional, Union
 
+import pydantic
 from starlette.responses import JSONResponse
 from pydantic import BaseModel, Field
 
@@ -48,8 +49,12 @@ def json_response(
         data=data,
         errors=errors,
     )
+    try:
+        content = schema.model_dump(mode="json")
+    except pydantic.SerializationError:
+        content = str(schema.model_dump(mode="python"))
     return JSONResponse(
-        content=schema.model_dump(mode="json"),
+        content=content,
         status_code=status_code,
         **kwargs,
     )

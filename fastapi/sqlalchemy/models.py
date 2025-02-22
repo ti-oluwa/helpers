@@ -124,12 +124,18 @@ class Model(ModelBase, metaclass=ModelBaseMeta):
     ```
     """
 
-    __abstract__ = True
-    __auto_tablename__ = False
+    __abstract__: bool = True
+    __auto_tablename__: bool = False
     """
     If True, the table name will be auto-generated based on the model and app name.
     Defaults to False.
     """
+    __short_name__: typing.Optional[str] = None
+    """A unique but short name or alias for the model."""
+    __verbose_name__: typing.Optional[str] = None
+    """A human-readable name for the model."""
+    __verbose_name_plural__: typing.Optional[str] = None
+    """A human-readable plural name for the model."""
 
     id: orm.Mapped[typing.Annotated[int, Ge(0)]] = orm.mapped_column(
         primary_key=True,
