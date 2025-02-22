@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from helpers.fastapi.models.users import AbstractBaseUser
 
 
-_DBSession = typing.Union[Session, AsyncSession]
+_DBSession: typing.TypeAlias = typing.Union[Session, AsyncSession]
 
 
 def db_session(connection: HTTPConnection) -> typing.Optional[_DBSession]:
@@ -20,9 +20,7 @@ def db_session(connection: HTTPConnection) -> typing.Optional[_DBSession]:
     return getattr(connection.state, "db_session", None)
 
 
-DBSession = typing.Annotated[
-    typing.Optional[_DBSession], fastapi.Depends(db_session)
-]
+DBSession = typing.Annotated[typing.Optional[_DBSession], fastapi.Depends(db_session)]
 """FastAPI dependency annotation used to inject the HTTP connection's database session."""
 
 

@@ -92,6 +92,8 @@ class App:
                 return
 
             configure = getattr(apps, "configure", None)
+            if not configure:
+                return
             if asyncio.iscoroutinefunction(configure):
                 await configure()
             elif callable(configure):
