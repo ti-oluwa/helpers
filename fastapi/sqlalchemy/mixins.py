@@ -1,4 +1,5 @@
 import datetime
+from tkinter import N
 import typing
 import uuid
 import sqlalchemy as sa
@@ -25,9 +26,9 @@ class TimestampMixin:
     )
     updated_at: orm.Mapped[datetime.datetime] = orm.mapped_column(
         sa.DateTime(timezone=True),
-        default=timezone.now,
+        default=None,
         onupdate=timezone.now,
-        nullable=False,
+        nullable=True,
         doc="The timestamp of the last update",
     )
 
