@@ -25,7 +25,7 @@ _model_cache = weakref.WeakValueDictionary()
 
 @typing.overload
 def partial(
-    model_cls: typing.Optional[typing.Type[Model]] = None,  # noqa :ARG006
+    model_cls: typing.Type[Model],  # noqa :ARG006
 ) -> typing.Type[Model]: ...
 
 
