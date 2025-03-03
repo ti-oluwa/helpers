@@ -1,9 +1,11 @@
 from enum import StrEnum
 from typing import Any, List, Dict, Optional, Union
 
-import pydantic
+from pydantic_core._pydantic_core import PydanticSerializationError
 from starlette.responses import JSONResponse
 from pydantic import BaseModel, Field
+
+from helpers.logging import log_exception
 
 
 class Status(StrEnum):
@@ -51,8 +53,18 @@ def json_response(
     )
     try:
         content = schema.model_dump(mode="json")
-    except pydantic.SerializationError:
-        content = str(schema.model_dump(mode="python"))
+    except PydanticSerializationError as exc:
+        log_exception(exc)
+        return JSONResponse(
+            content={
+                "status": Status.ERROR.value,
+                "message": "Response serialization failed",
+                "detail": "Could not serialize response data",
+                "errors": [{"type": "serialization_error"}],
+            },
+            status_code=500,
+            **kwargs,
+        )
     return JSONResponse(
         content=content,
         status_code=status_code,

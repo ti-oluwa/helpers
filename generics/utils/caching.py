@@ -30,6 +30,19 @@ CACHE_MISS = _CacheSentinel()
 
 
 @typing.overload
+def ttl_cache(func: Function[P, R]) -> Function[P, R]: ...
+
+
+@typing.overload
+def ttl_cache(
+    maxsize: int = 128,
+    ttl: float = 3600,
+    include_args: bool = True,
+    include_kwargs: bool = True,
+) -> typing.Callable[[Function[P, R]], Function[P, R]]: ...
+
+
+@typing.overload
 def ttl_cache(
     func: typing.Optional[Function[P, R]] = None,
     *,
@@ -40,6 +53,19 @@ def ttl_cache(
 ) -> typing.Union[
     typing.Callable[[Function[P, R]], Function[P, R]], Function[P, R]
 ]: ...
+
+
+@typing.overload
+def ttl_cache(func: CoroutineFunction[P, R]) -> CoroutineFunction[P, R]: ...
+
+
+@typing.overload
+def ttl_cache(
+    maxsize: int = 128,
+    ttl: float = 3600,
+    include_args: bool = True,
+    include_kwargs: bool = True,
+) -> typing.Callable[[CoroutineFunction[P, R]], CoroutineFunction[P, R]]: ...
 
 
 @typing.overload
@@ -217,6 +243,19 @@ def _make_ttu_func(ttu: typing.Union[float, TTUFunc[_VT]]) -> TTUFunc[_VT]:
 
 
 @typing.overload
+def tlru_cache(func: Function[P, R]) -> Function[P, R]: ...
+
+
+@typing.overload
+def tlru_cache(
+    maxsize: int = 128,
+    ttu: typing.Union[float, TTUFunc[R]] = default_ttu,
+    include_args: bool = True,
+    include_kwargs: bool = True,
+) -> typing.Callable[[Function[P, R]], Function[P, R]]: ...
+
+
+@typing.overload
 def tlru_cache(
     func: typing.Optional[Function[P, R]] = None,
     *,
@@ -227,6 +266,21 @@ def tlru_cache(
 ) -> typing.Union[
     typing.Callable[[Function[P, R]], Function[P, R]], Function[P, R]
 ]: ...
+
+
+@typing.overload
+def tlru_cache(
+    func: CoroutineFunction[P, R],
+) -> CoroutineFunction[P, R]: ...
+
+
+@typing.overload
+def tlru_cache(
+    maxsize: int = 128,
+    ttu: typing.Union[float, TTUFunc[R]] = default_ttu,
+    include_args: bool = True,
+    include_kwargs: bool = True,
+) -> typing.Callable[[CoroutineFunction[P, R]], CoroutineFunction[P, R]]: ...
 
 
 @typing.overload

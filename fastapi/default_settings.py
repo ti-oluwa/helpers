@@ -60,3 +60,18 @@ EXCEPTION_HANDLERS = {
     pydantic.ValidationError: "helpers.fastapi.response.exception_handling.pydantic_validation_error_handler",
     fastapi.exceptions.RequestValidationError: "helpers.fastapi.response.exception_handling.request_validation_error_handler",
 }
+
+SENSITIVE_HEADERS = {
+    "x-access-token",
+    "x-refresh-token",
+    "x-otp",
+    "x-otp-token",
+    "x-auth-token",
+    "authorization",
+    "x-api-key",
+    "x-client-id",
+    "x-client-secret",
+    "x-client-token",
+    "x-api-token",
+    "x-api-secret",
+}

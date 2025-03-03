@@ -46,7 +46,10 @@ class ThrottleKwargs(typing.TypedDict, total=False):
     """Handler to call when the client connection is throttled."""
 
 
-class DecoratorDepends(typing.Generic[_P, _R, _Q, _S], fastapi.params.Depends):
+class DecoratorDepends(
+    typing.Generic[_P, _R, _Q, _S],
+    fastapi.params.Depends,
+):
     """
     `fastapi.params.Depends` subclass that allows instances to be used as decorators.
 
@@ -69,7 +72,7 @@ class DecoratorDepends(typing.Generic[_P, _R, _Q, _S], fastapi.params.Depends):
         dependency: typing.Optional[Dependency[_Q, _S]] = None,
         *,
         use_cache: bool = True,
-    ):
+    ) -> None:
         self.dependency_decorator = dependency_decorator
         super().__init__(dependency, use_cache=use_cache)
 

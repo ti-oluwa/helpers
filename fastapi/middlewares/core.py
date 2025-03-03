@@ -1,6 +1,7 @@
 import inspect
 import typing
 import fastapi
+import time
 import re
 
 from helpers.fastapi.config import settings
@@ -107,6 +108,20 @@ async def IPBlacklistMiddleware(request: fastapi.Request, call_next):
                 status_code=403, content={"detail": "Access denied."}
             )
     response = await call_next(request)
+    return response
+
+
+async def RequestProcessTimeMiddleware(request: fastapi.Request, call_next):
+    """
+    Middleware to calculate the time taken to process the request.
+
+    :param request: FastAPI request object
+    :param call_next: Next middleware in the chain
+    """
+    start_time = time.perf_counter()
+    response = await call_next(request)
+    process_time = time.perf_counter() - start_time
+    response.headers["X-Process-Time"] = str(process_time)
     return response
 
 
