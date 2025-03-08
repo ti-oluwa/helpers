@@ -1,5 +1,6 @@
 import typing
 import functools
+import hashlib
 from annotated_types import Ge
 from starlette.websockets import WebSocket
 from starlette.requests import HTTPConnection
@@ -160,13 +161,10 @@ class BaseThrottle(typing.Generic[_HTTPConnection], metaclass=ThrottleMeta):
         key = await self.get_key(connection, *args, **kwargs)
         wait_period = await self.get_wait_period(key)
         connection_throttled = (
-            self.connection_throttled
-            or APIThrottle.connection_throttled
+            self.connection_throttled or APIThrottle.connection_throttled
         )
         if wait_period != 0:
-            return await connection_throttled(
-                connection, wait_period, *args, **kwargs
-            )
+            return await connection_throttled(connection, wait_period, *args, **kwargs)
         return None
 
     async def get_key(self, connection: _HTTPConnection, *args, **kwargs) -> str:
@@ -195,7 +193,9 @@ class HTTPThrottle(BaseThrottle[HTTPConnection]):
 
         identifier = self.identifier or APIThrottle.identifier
         rate_key = await identifier(request)
-        key = f"{APIThrottle.prefix}:{rate_key}:{route_index}:{dependency_index}:{id(self)}"
+        key_suffix = f"{rate_key}:{route_index}:{dependency_index}:{id(self)}"
+        key_suffix_hash = hashlib.md5(key_suffix.encode()).hexdigest()
+        key = f"{APIThrottle.prefix}:http:{key_suffix_hash}"
         # Added id(self) to ensure unique key for each throttle instance
         # in the advent that the dependency index is not unique. Especially when
         # used with the `throttle` decorator.
@@ -211,7 +211,12 @@ class WebSocketThrottle(BaseThrottle[WebSocket]):
     async def get_key(self, connection: WebSocket, context_key="") -> str:
         identifier = self.identifier or APIThrottle.identifier
         rate_key = await identifier(connection)
-        key = f"{APIThrottle.prefix}:ws:{rate_key}:{context_key}"
+        key_suffix = f"{rate_key}:{connection.url.path}:{id(self)}:{context_key}"
+        key_suffix_hash = hashlib.md5(key_suffix.encode()).hexdigest()
+        key = f"{APIThrottle.prefix}:ws:{key_suffix_hash}"
+        # Added id(self) to ensure unique key for each throttle instance
+        # in the advent that the context key is not unique. Especially when
+        # used with the `throttle` decorator.
         return key
 
     async def __call__(self, connection: WebSocket, context_key=""):
