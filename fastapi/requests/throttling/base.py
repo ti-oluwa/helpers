@@ -174,13 +174,13 @@ async def configure(
 
     try:
         await APIThrottle.init(**init_kwargs)
-        if not persistent:
-            # This is to ensure that the prefix is unique across
-            # multiple instances of FastAPIThrottle and also reduce
-            # the chances of throttling key conflicts with existing keys in Redis,
-            # Which may lead to deleting keys that are not related to throttling
-            # on application restart or shutdown in non-persistent mode.
-            APIThrottle.prefix += f"-{uuid.uuid4().hex}"
+        # if not persistent:
+        #     # This is to ensure that the prefix is unique across
+        #     # multiple instances of FastAPIThrottle and also reduce
+        #     # the chances of throttling key conflicts with existing keys in Redis,
+        #     # Which may lead to deleting keys that are not related to throttling
+        #     # on application restart or shutdown in non-persistent mode.
+        #     APIThrottle.prefix += f"-{uuid.uuid4().hex}"
         yield
 
     finally:
