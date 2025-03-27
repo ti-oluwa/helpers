@@ -22,19 +22,19 @@ ConnectionIdentifier = typing.Union[
 ]
 
 _Args = typing.Tuple[typing.Any, ...]
-_WaitPeriod = typing.NewType("_WaitPeriod", int)
+_WaitPeriod: typing.TypeAlias = int
 ConnectionThrottledHandler = typing.Callable[
     [_HTTPConnection, _WaitPeriod, Unpack[_Args]], typing.Any
 ]
 
 
-async def default_connection_identifier(connection: _HTTPConnection) -> str:
+async def default_connection_identifier(connection: HTTPConnection) -> str:
     client_ip = get_ip_address(connection)
     return f"{client_ip.exploded}:{connection.scope['path']}"
 
 
 async def default_connection_throttled(
-    connection: _HTTPConnection, wait_period: _WaitPeriod, *args, **kwargs
+    connection: HTTPConnection, wait_period: _WaitPeriod, *args, **kwargs
 ):
     """
     Handler for throttled HTTP connections
@@ -51,7 +51,7 @@ async def default_connection_throttled(
     )
 
 
-class APIThrottle:
+class APIThrottle(typing.Generic[_HTTPConnection]):
     """APIThrottle configuration"""
 
     redis = None  # Do not modify after initialization
@@ -100,6 +100,8 @@ end"""
 
     @classmethod
     async def close(cls) -> None:
+        if not cls.redis:
+            return
         await cls.redis.close()
 
     @classmethod
@@ -113,27 +115,28 @@ end"""
         return re.compile(rf"{cls.prefix}:*")
 
     @classmethod
-    def check_key_pattern(self, key: str) -> bool:
+    def check_key_pattern(cls, key: str) -> bool:
         """Check if the key matches the throttling key pattern"""
-        return re.match(self.get_key_pattern(), key) is not None
+        return re.match(cls.get_key_pattern(), key) is not None
 
 
-class APIThrottleInitKwargs(typing.TypedDict):
+class APIThrottleInitKwargs(typing.TypedDict, total=False):
     """Keyword arguments for initializing APIThrottle."""
 
     prefix: str
     """Unique prefix to be used for throttling keys in Redis."""
     redis: typing.Union[str, async_pyredis.Redis]
     """Connection to the Redis."""
-    identifier: ConnectionIdentifier[_HTTPConnection]
+    identifier: ConnectionIdentifier
     """Connected client identifier generator."""
-    connection_throttled: ConnectionThrottledHandler[_HTTPConnection]
+    connection_throttled: ConnectionThrottledHandler
     """Default handler for throttled HTTP connections."""
 
 
 @asynccontextmanager
 async def configure(
-    persistent: bool = True, **init_kwargs: Unpack[APIThrottleInitKwargs]
+    persistent: bool = True,
+    **init_kwargs: Unpack[APIThrottleInitKwargs],
 ):
     """
     Asynchronous context manager
@@ -173,7 +176,7 @@ async def configure(
         raise ValueError("Redis location/connection must be provided")
 
     try:
-        await APIThrottle.init(**init_kwargs)
+        await APIThrottle.init(**init_kwargs) # type: ignore
         # if not persistent:
         #     # This is to ensure that the prefix is unique across
         #     # multiple instances of FastAPIThrottle and also reduce
@@ -184,7 +187,7 @@ async def configure(
         yield
 
     finally:
-        if not persistent:
+        if not persistent and APIThrottle.redis:
             # Get all keys set by FastAPIThrottle
             keys_set = await APIThrottle.redis.keys(f"{APIThrottle.prefix}:*")
             if keys_set:

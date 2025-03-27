@@ -1,8 +1,8 @@
 import collections.abc
+import functools
 from typing import Dict, Mapping, Union, Any
 
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.requests import Request
+from starlette.types import ASGIApp, Receive, Scope, Send
 from starlette.responses import Response
 
 from helpers.fastapi.exceptions import ImproperlyConfigured
@@ -10,9 +10,10 @@ from helpers.fastapi.config import settings
 from helpers.logging import log_exception
 from helpers import RESOURCES_PATH
 from helpers.dependencies import depends_on
+from helpers.generics.utils.caching import ttl_cache
 
 
-class MaintenanceMiddleware(BaseHTTPMiddleware):
+class MaintenanceMiddleware:
     """
     Middleware to handle application maintenance mode.
     The middleware will return a 503 Service Unavailable response with the maintenance message.
@@ -46,21 +47,25 @@ class MaintenanceMiddleware(BaseHTTPMiddleware):
     setting_name = "MAINTENANCE_MODE"
 
     @depends_on({"aiofiles": "aiofiles"})
-    def __init__(self, *args, **kwargs) -> None:
-        super().__init__(*args, **kwargs)
-        s = getattr(settings, type(self).setting_name)
-        if not isinstance(s, collections.abc.Mapping):
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    @functools.cached_property
+    def settings(cls) -> Mapping[str, Any]:
+        middleware_settings = settings.get(cls.setting_name, {})
+        if not isinstance(middleware_settings, collections.abc.Mapping):
             raise TypeError(
-                f"settings.{self.setting_name} should be a dict not {type(s).__name__}"
+                f"settings.{cls.setting_name} should be a mapping not {type(middleware_settings).__name__}"
             )
+        return middleware_settings
 
-        self.settings: Mapping[str, Any] = s
-
-    def _maintenance_mode_on(self) -> bool:
+    @functools.cached_property
+    def maintenance_mode_on(self) -> bool:
         """Check if the application is in maintenance mode."""
         status = str(self.settings.get("status", "off"))
         return status.lower() in ["on", "true"]
 
+    @ttl_cache(ttl=3600)
     async def get_message(self) -> Union[str, bytes]:
         """Return the maintenance message."""
         msg = self.settings.get("message", "default:minimal")
@@ -98,12 +103,17 @@ class MaintenanceMiddleware(BaseHTTPMiddleware):
             "Content-Type": "text/html",
         }
 
-    async def dispatch(self, request: Request, call_next) -> Response:
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         """Process the request."""
-        if self._maintenance_mode_on():
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        if self.maintenance_mode_on:
             content = await self.get_response_content()
             headers = await self.get_response_headers()
-            return Response(content, status_code=503, headers=headers)
+            response = Response(content, status_code=503, headers=headers)
+            await response(scope, receive, send)
+            return
 
-        response = await call_next(request)
-        return response
+        await self.app(scope, receive, send)

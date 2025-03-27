@@ -59,7 +59,7 @@ class DownloadConfig:
     retry_delay: float = 1.0
     timeout: typing.Optional[float] = None
     chunk_size: int = 8192
-    request_kwargs: typing.Dict[str, typing.Any] = None
+    request_kwargs: typing.Optional[typing.Dict[str, typing.Any]] = None
     cache_for: float = 300.0
 
 
@@ -187,7 +187,7 @@ async def download_with_retry(
                 content = bytearray()
 
                 async for chunk in response.aiter_bytes(chunk_size=config.chunk_size):
-                    if asyncio.current_task().cancelled():
+                    if asyncio.current_task().cancelled():  # type: ignore
                         raise asyncio.CancelledError()
                     content.extend(chunk)
 
@@ -219,6 +219,7 @@ async def download_with_retry(
 
         except Exception as exc:
             raise DownloadFailed(exc) from exc
+    raise DownloadFailed(f"Failed to download {url}")
 
 
 async def async_download(
@@ -285,7 +286,7 @@ def download(
     ```
     """
     if not asyncio.iscoroutinefunction(handler):
-        handler = sync_handler_to_async(handler)
+        handler = sync_handler_to_async(handler)  # type: ignore
     return asyncio.run(async_download(url, handler, config))
 
 
@@ -328,6 +329,8 @@ async def fast_multi_download(
 
     async with get_client(config) as client:
         tasks = []
+        handler = default_handler
+
         for name, url_info in urls.items():
             handler = default_handler
             if isinstance(url_info, tuple):
@@ -379,7 +382,7 @@ async def fast_multi_download(
     if not results and failed:
         raise DownloadFailed(f"All downloads failed: {failed.keys()}")
 
-    if len(results) != total:
+    if len(results) != total and progress_callback:
         progress_callback(total, total)
     return results
 
@@ -515,8 +518,8 @@ def multi_download(
         return {}
 
     config = config or DownloadConfig()
-    results = {}
-    errors = {}
+    results: typing.Dict[str, typing.Any] = {}
+    errors: typing.Dict[str, typing.Dict[str, typing.Any]] = {}
     total = len(urls)
     completed = 0
 
@@ -534,14 +537,18 @@ def multi_download(
             if progress_callback:
                 progress_callback(completed, total)
         except Exception as exc:
-            errors[name] = exc
+            errors[name] = {
+                "error": exc,
+                "handler": handler,
+            }
             log_exception(exc)
 
     # If any download still failed, retry them once
     if errors and config.max_retries > 1:
         retry_delay = config.retry_delay
-        for name, error in list(errors.items()):
+        for name, data in list(errors.items()):
             url_info = urls[name]
+            handler = data.get("handler", default_handler)
             if isinstance(url_info, tuple):
                 url = url_info[0]
             else:
@@ -564,9 +571,9 @@ def multi_download(
     if not results and errors:
         raise DownloadFailed(f"All downloads failed: {errors.keys()}") from next(
             iter(errors.values())
-        )
+        )["error"]
 
-    if len(results) != total:
+    if len(results) != total and progress_callback:
         progress_callback(total, total)
     return results
 

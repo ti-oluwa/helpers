@@ -1,3 +1,4 @@
+import enum
 import typing
 import json
 from dataclasses import dataclass, KW_ONLY
@@ -13,9 +14,6 @@ class BaseEventType(ExtendedEnum):
     pass
 
 
-_EventType = typing.TypeVar("_EventType", bound=BaseEventType)
-
-
 class EventType(BaseEventType):
     """Default event types"""
 
@@ -28,7 +26,7 @@ class EventType(BaseEventType):
 class Event:
     """Base class for events."""
 
-    type: _EventType
+    type: typing.Union[enum.Enum, BaseEventType]
     """The type of the event."""
     message: str = "An event occurred."
     """A message describing the event."""
@@ -52,7 +50,9 @@ class Event:
         cls,
         __data: typing.Union[str, typing.Mapping[str, typing.Any]],
         /,
-        event_type_enum: typing.Type[_EventType],
+        event_type_enum: typing.Union[
+            typing.Type[enum.Enum], typing.Type[BaseEventType]
+        ],
     ):
         """
         Load an event from a JSON string or a dictionary.
@@ -63,10 +63,17 @@ class Event:
         """
         if isinstance(__data, str):
             return cls.from_json(__data, event_type_enum)
-        return cls.from_dict(__data, event_type_enum)
+        return cls.from_dict(dict(__data), event_type_enum)
 
     @classmethod
-    def from_json(cls, __json: str, /, event_type_enum: typing.Type[_EventType]):
+    def from_json(
+        cls,
+        __json: str,
+        /,
+        event_type_enum: typing.Union[
+            typing.Type[enum.Enum], typing.Type[BaseEventType]
+        ],
+    ):
         """
         Load an event from a JSON string.
 
@@ -80,9 +87,11 @@ class Event:
     @classmethod
     def from_dict(
         cls,
-        __dict: typing.Mapping[str, typing.Any],
+        __dict: typing.MutableMapping[str, typing.Any],
         /,
-        event_type_enum: typing.Type[_EventType],
+        event_type_enum: typing.Union[
+            typing.Type[enum.Enum], typing.Type[BaseEventType]
+        ],
     ):
         """
         Load an event from a dictionary.
@@ -131,6 +140,7 @@ class Event:
 @dataclass(slots=True)
 class IncomingEvent(Event):
     """Event sent from a client, received by a websocket consumer."""
+
     pass
 
 

@@ -5,12 +5,10 @@ HTTP connection and connected user access control dependencies
 import typing
 import asyncio
 from starlette.requests import HTTPConnection
-from starlette.exceptions import HTTPException
-from starlette.websockets import WebSocket, WebSocketDisconnect
 
 from helpers.fastapi.utils.sync import sync_to_async
-from helpers.fastapi.models.users import AbstractBaseUser
-from .connections import connected_user, DBSession, _DBSession
+from helpers.fastapi.exceptions.utils import raise_http_exception
+from .connections import connected_user, AnyDBSession, _DBSession, _UserModel
 from . import Dependency
 
 
@@ -27,26 +25,8 @@ _ResultHandler = typing.Callable[
 ]
 
 
-def raise_access_denied(
-    connection: HTTPConnection,
-    *,
-    status_code: int,
-    message: str = "Access Denied!",
-):
-    """
-    Raises an HTTP exception with the provided status code and message.
-
-    :param connection: The HTTP connection.
-    :param status_code: The status code to return. Default is `HTTP_403_FORBIDDEN`.
-    :param message: The message to return. Default is "Access Denied!".
-    """
-    if isinstance(connection, WebSocket):
-        raise WebSocketDisconnect(code=status_code, reason=message)
-    raise HTTPException(status_code=status_code, detail=message)
-
-
 def access_control(
-    access_checker: _AccessChecker[HTTPConnection],
+    access_checker: _AccessChecker[HTTPConnection, _DBSession],
     *,
     status_code: int = 403,
     message: str = "Access Denied!",
@@ -54,7 +34,7 @@ def access_control(
         typing.Callable[[HTTPConnection, int, str], typing.NoReturn],
         typing.Literal[False],
         None,
-    ] = raise_access_denied,
+    ] = raise_http_exception,
     result_handler: typing.Optional[_ResultHandler[HTTPConnection]] = None,
 ):
     """
@@ -84,14 +64,16 @@ def access_control(
     :return: A dependency that checks if the connection is allowed access to the resource.
     """
 
-    async def access_control_dependency(connection: HTTPConnection, session: DBSession):
+    async def access_control_dependency(
+        connection: HTTPConnection, session: AnyDBSession
+    ):
         if not asyncio.iscoroutinefunction(access_checker):
             has_access = await sync_to_async(access_checker)(connection, session)
         else:
             has_access = await access_checker(connection, session)
 
         if not has_access and raise_access_denied:
-            raise_access_denied(connection, status_code=status_code, message=message)
+            raise_access_denied(connection, status_code, message)
 
         if result_handler:
             if not asyncio.iscoroutinefunction(result_handler):
@@ -106,17 +88,17 @@ def access_control(
 
 
 def user_access_control(
-    access_checker: _AccessChecker[AbstractBaseUser],
+    access_checker: _AccessChecker[_UserModel, _DBSession],
     *,
-    get_user: typing.Callable[..., AbstractBaseUser] = connected_user,
+    get_user: typing.Callable[..., typing.Optional[_UserModel]] = connected_user,
     status_code: int = 403,
     message: str = "Access Denied!",
     raise_access_denied: typing.Union[
         typing.Callable[[HTTPConnection, int, str], typing.NoReturn],
         typing.Literal[False],
         None,
-    ] = raise_access_denied,
-    result_handler: typing.Optional[_ResultHandler[AbstractBaseUser]] = None,
+    ] = raise_http_exception,
+    result_handler: typing.Optional[_ResultHandler[_UserModel]] = None,
 ):
     """
     Connection access control dependency factory.
@@ -150,18 +132,21 @@ def user_access_control(
 
     async def access_control_dependency(
         connection: HTTPConnection,
-        user: typing.Annotated[AbstractBaseUser, Dependency(get_user)],
-        session: DBSession,
+        user: typing.Annotated[typing.Optional[_UserModel], Dependency(get_user)],
+        session: AnyDBSession,
     ):
-        if not asyncio.iscoroutinefunction(access_checker):
-            has_access = await sync_to_async(access_checker)(user, session)
+        if user:
+            if not asyncio.iscoroutinefunction(access_checker):
+                has_access = await sync_to_async(access_checker)(user, session)
+            else:
+                has_access = await access_checker(user, session)
         else:
-            has_access = await access_checker(user, session)
+            has_access = False
 
         if not has_access and raise_access_denied:
-            raise_access_denied(connection, status_code=status_code, message=message)
+            raise_access_denied(connection, status_code, message)
 
-        if result_handler:
+        if user and result_handler:
             if not asyncio.iscoroutinefunction(result_handler):
                 result = await sync_to_async(result_handler)(user)
             else:
@@ -183,7 +168,7 @@ Connection access control dependency that requires the connected user to be auth
 :raises HTTPException: If the connected user is not authenticated.
 :return: The connected user if authenticated.
 """
-AuthenticatedUser = typing.Annotated[AbstractBaseUser, authenticated_user_only]
+AuthenticatedUser = typing.Annotated[_UserModel, authenticated_user_only]
 """
 Annotated connection access control dependency type that requires the connected user to be authenticated.
 
@@ -193,7 +178,8 @@ Annotated connection access control dependency type that requires the connected 
 
 
 active_user_only = user_access_control(
-    lambda user, _: user.is_active, get_user=authenticated_user_only
+    lambda user, _: getattr(user, "is_active", False),
+    get_user=authenticated_user_only,  # type: ignore
 )
 """
 Access control dependency that requires the connected user to be (authenticated and) active.
@@ -201,7 +187,7 @@ Access control dependency that requires the connected user to be (authenticated 
 :raises HTTPException: If the connected user is not active.
 :return: The connected user if active.
 """
-ActiveUser = typing.Annotated[AbstractBaseUser, active_user_only]
+ActiveUser = typing.Annotated[_UserModel, active_user_only]
 """
 Annotated connection access control dependency type that requires the connected user to be (authenticated and) active.
 
@@ -211,7 +197,8 @@ Annotated connection access control dependency type that requires the connected 
 
 
 admin_user_only = user_access_control(
-    lambda user, _: user.is_admin, get_user=active_user_only
+    lambda user, _: getattr(user, "is_admin", False),
+    get_user=active_user_only,  # type: ignore
 )
 """
 Access control dependency that requires the connected user to be (authenticated and) an admin.
@@ -219,7 +206,7 @@ Access control dependency that requires the connected user to be (authenticated 
 :raises HTTPException: If the connected user is not an admin.
 :return: The connected user if an admin.
 """
-AdminUser = typing.Annotated[AbstractBaseUser, admin_user_only]
+AdminUser = typing.Annotated[_UserModel, admin_user_only]
 """
 Annotated connection access control dependency type that requires the connected user to be (authenticated and) an admin.
 
@@ -229,7 +216,8 @@ Annotated connection access control dependency type that requires the connected 
 
 
 staff_user_only = user_access_control(
-    lambda user, _: user.is_staff, get_user=active_user_only
+    lambda user, _: getattr(user, "is_staff", False),
+    get_user=active_user_only,  # type: ignore
 )
 """
 Access control dependency that requires the connected user to be (authenticated and) a staff.
@@ -237,7 +225,7 @@ Access control dependency that requires the connected user to be (authenticated 
 :raises HTTPException: If the connected user is not a staff.
 :return: The connected user if a staff.
 """
-StaffUser = typing.Annotated[AbstractBaseUser, staff_user_only]
+StaffUser = typing.Annotated[_UserModel, staff_user_only]
 """
 Annotated dependency type that requires the connected user to be (authenticated and) a staff.
 

@@ -120,7 +120,7 @@ PASSWORD_STRENGTH_VALIDATORS = [
 
 def password_strength_validator(
     value: str,
-    min_strength: int = 0.7,
+    min_strength: float = 0.7,
     password_validators: typing.List[typing.Callable] = PASSWORD_STRENGTH_VALIDATORS,
 ) -> str:
     """

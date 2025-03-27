@@ -43,7 +43,7 @@ class FieldValidator:
         self.message = message
 
     @property
-    def __doc__(self) -> str:
+    def __doc__(self) -> typing.Optional[str]:  # type: ignore
         return self.func.__doc__
 
     @property
@@ -60,7 +60,7 @@ class FieldValidator:
             if self.requires_context:
                 self.func(value, field, instance)
             else:
-                self.func(value)
+                self.func(value, None, None)
         except (ValueError, TypeError) as exc:
             msg = self.message or str(exc)
             raise FieldError(
@@ -156,7 +156,7 @@ eq = number_validator_factory(operator.eq, "=")
 def number_range(
     min_val: SupportsRichComparison,
     max_val: SupportsRichComparison,
-    message: str = None,
+    message: typing.Optional[str] = None,
 ):
     """
     Number range validator.
@@ -186,7 +186,7 @@ _LENGTH_VALIDATION_FAILURE_MESSAGE = (
 
 
 def length_validator_factory(
-    comparison_func: typing.Callable[[CountableValue, Bound], bool], symbol: str
+    comparison_func: typing.Callable[[int, Bound], bool], symbol: str
 ):
     def validator_factory(bound: Bound, message: typing.Optional[str] = None):
         global _LENGTH_VALIDATION_FAILURE_MESSAGE
@@ -238,7 +238,7 @@ _NO_MATCH_MESSAGE = "'{name}' must match pattern {pattern!r} ({value!r} doesn't)
 
 def pattern(
     regex: typing.Union[re.Pattern, typing.AnyStr],
-    flags: re.RegexFlag = 0,
+    flags: typing.Union[re.RegexFlag, typing.Literal[0]] = 0,
     func: typing.Optional[typing.Callable] = None,
     message: typing.Optional[str] = None,
 ):

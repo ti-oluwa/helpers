@@ -1,3 +1,4 @@
+import time
 import typing
 import asyncio
 from typing_extensions import ParamSpec
@@ -10,45 +11,55 @@ from helpers.generics.typing import Function, CoroutineFunction
 _P = ParamSpec("_P")
 _R = typing.TypeVar("_R")
 _T = typing.TypeVar("_T")
-_R_co = typing.TypeVar("_R", covariant=True)
+_R_co = typing.TypeVar("_R_co", covariant=True)
+BackOffFunction = typing.Callable[[int], float]
 
 
 @typing.overload
-def retry(
+def retry( # type: ignore
     func: typing.Optional[Function[_P, _R]] = None,
     *,
     exc_type: typing.Optional[
-        typing.Union[typing.Tuple[BaseException, ...], BaseException]
+        typing.Union[
+            typing.Tuple[typing.Type[BaseException], ...], typing.Type[BaseException]
+        ]
     ] = None,
     count: int = 1,
+    backoff: typing.Optional[typing.Union[BackOffFunction, float]] = None,
 ) -> typing.Union[
     typing.Callable[[Function[_P, _R]], Function[_P, _R]], Function[_P, _R]
 ]: ...
 
 
 @typing.overload
-def retry(
+def retry( # type: ignore
     func: typing.Optional[CoroutineFunction[_P, _R]] = None,
     *,
     exc_type: typing.Optional[
-        typing.Union[typing.Tuple[BaseException, ...], BaseException]
+        typing.Union[
+            typing.Tuple[typing.Type[BaseException], ...], typing.Type[BaseException]
+        ]
     ] = None,
     count: int = 1,
+    backoff: typing.Optional[typing.Union[BackOffFunction, float]] = None,
 ) -> typing.Union[
     typing.Callable[[CoroutineFunction[_P, _R]], CoroutineFunction[_P, _R]],
     CoroutineFunction[_P, _R],
 ]: ...
 
 
-def retry(
+def retry( # type: ignore
     func: typing.Optional[
         typing.Union[Function[_P, _R], CoroutineFunction[_P, _R]]
     ] = None,
     *,
     exc_type: typing.Optional[
-        typing.Union[typing.Tuple[BaseException, ...], BaseException]
+        typing.Union[
+            typing.Tuple[typing.Type[BaseException], ...], typing.Type[BaseException]
+        ]
     ] = None,
     count: int = 1,
+    backoff: typing.Optional[typing.Union[BackOffFunction, float]] = None,
 ) -> typing.Union[
     typing.Callable[
         [typing.Union[Function[_P, _R], CoroutineFunction[_P, _R]]],
@@ -64,33 +75,53 @@ def retry(
     :param func: The function to decorate.
     :param exc_type: The target exception type(s) to catch.
     :param count: The number of times to retry the function.
+    :param backoff: The backoff function or constant value to apply between retries.
+    :return: The decorated function.
     """
 
     def decorator(
         func: typing.Union[Function[_P, _R], CoroutineFunction[_P, _R]],
     ) -> typing.Union[Function[_P, _R], CoroutineFunction[_P, _R]]:
+        wrapper = None
         if asyncio.iscoroutinefunction(func):
 
-            async def wrapper(*args: _P.args, **kwargs: _P.kwargs) -> _R:
-                for _ in range(count):
+            @functools.wraps(func)
+            async def async_wrapper(*args: _P.args, **kwargs: _P.kwargs) -> _R:
+                for i in range(count):
                     try:
                         return await func(*args, **kwargs)
                     except exc_type or Exception as exc:
                         log_exception(exc)
+
+                        if backoff is not None:
+                            if callable(backoff):
+                                await asyncio.sleep(backoff(i))
+                            else:
+                                await asyncio.sleep(backoff)
                         continue
                 return await func(*args, **kwargs)
+
+            wrapper = async_wrapper
         else:
 
-            def wrapper(*args: _P.args, **kwargs: _P.kwargs) -> _R:
+            @functools.wraps(func)
+            def sync_wrapper(*args: _P.args, **kwargs: _P.kwargs) -> _R:
                 for _ in range(count):
                     try:
-                        return func(*args, **kwargs)
+                        return func(*args, **kwargs)  # type: ignore
                     except exc_type or Exception as exc:
                         log_exception(exc)
+                        if backoff is not None:
+                            if callable(backoff):
+                                time.sleep(backoff(_))
+                            else:
+                                time.sleep(backoff)
                         continue
-                return func(*args, **kwargs)
+                return func(*args, **kwargs)  # type: ignore
 
-        return functools.update_wrapper(wrapper, func)
+            wrapper = sync_wrapper
+
+        return wrapper
 
     if func is None:
         return decorator
@@ -154,6 +185,6 @@ class classorinstancemethod(typing.Generic[_T, _P, _R_co]):
         /,
     ) -> typing.Callable[_P, _R_co]:
         if instance is None:  # Accessed from the class
-            return classmethod(self.func).__get__(instance, owner)
+            return classmethod(self.func).__get__(None, owner)  # type: ignore
         # Accessed from the instance
         return functools.partial(self.func, instance)

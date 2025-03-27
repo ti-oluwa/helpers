@@ -2,7 +2,7 @@ from django.conf import settings
 from django.utils import timezone
 
 
-def application(request):
+def application(_):
     """
     Adds the project/application details to the context.
     """

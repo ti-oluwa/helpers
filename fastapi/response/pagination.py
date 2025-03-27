@@ -3,7 +3,6 @@ import typing
 from starlette.requests import Request
 
 _T = typing.TypeVar("_T")
-_Request = typing.TypeVar("_Request", bound=Request)
 
 
 class _PaginatedData(typing.Generic[_T], typing.TypedDict):
@@ -12,12 +11,12 @@ class _PaginatedData(typing.Generic[_T], typing.TypedDict):
     offset: int
     next: typing.Optional[str]
     previous: typing.Optional[str]
-    data: typing.Iterable[_T]
+    data: typing.Sequence[_T]
 
 
 def paginated_data(
-    request: _Request,
-    data: typing.Iterable[_T],
+    request: Request,
+    data: typing.Sequence[_T],
     limit: int,
     offset: int,
     total: typing.Optional[int] = None,

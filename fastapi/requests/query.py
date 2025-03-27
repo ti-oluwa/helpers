@@ -17,13 +17,15 @@ class QueryParamNotSet(pydantic.BaseModel):
     def __repr__(self) -> str:
         return "QueryParamNotSet"
 
-    def __class_getitem__(cls, *args):
+    def __class_getitem__(cls, *args):  # type: ignore
         return None
 
     def __copy__(self):
         return self
 
-    def __deepcopy__(self, memo):
+    def __deepcopy__(
+        self, memo: typing.Optional[typing.Dict[int, typing.Any]] = None
+    ) -> "QueryParamNotSet":
         return self
 
 
@@ -73,7 +75,7 @@ def ordering_query_parser_factory(
     *,
     allowed_columns: typing.Optional[typing.Set[str]] = None,
 ) -> typing.Callable[
-    [typing.Union[typing.List[str], str]],
+    [str],
     typing.Awaitable[typing.Union[OrderingExpressions[_T], QueryParamNotSet]],
 ]:
     """
@@ -86,12 +88,15 @@ def ordering_query_parser_factory(
     if allowed_columns is not None and not allowed_columns:
         raise ValueError("allowed_columns must not be an empty set")
 
-    table_columns = ordered.__table__.columns
-    for column in allowed_columns:
-        if column not in table_columns:
-            raise ValueError(
-                f"Column {column} not found in ordered model '{ordered.__name__}'"
-            )
+    if allowed_columns is None:
+        allowed_columns = {column.name for column in ordered.__table__.columns}  # type: ignore
+    else:
+        table_columns = ordered.__table__.columns  # type: ignore
+        for column in allowed_columns:
+            if column not in table_columns:
+                raise ValueError(
+                    f"Column {column} not found in ordered model '{ordered.__name__}'"
+                )
 
     async def _query_parser(
         ordering: typing.Annotated[
@@ -105,14 +110,17 @@ def ordering_query_parser_factory(
             return ParamNotSet
 
         if isinstance(ordering, str):
-            ordering = ordering.split(",")
+            ordering_columns = ordering.split(",")
+        else:
+            ordering_columns = ordering
 
+        print(ordering_columns)
         check_columns = allowed_columns is not None
         if check_columns and not allowed_columns:
             raise ValueError("allowed_columns must not be an empty set")
 
         result = []
-        for column in ordering:
+        for column in ordering_columns:
             is_desc = column.startswith("-")
             clean_column = column[1:] if is_desc else column
 

@@ -1,4 +1,4 @@
-from typing import Callable, Optional, TypeVar, Union, overload
+import typing
 
 try:
     from typing import ParamSpec
@@ -11,7 +11,7 @@ import pstats
 import io
 
 _P = ParamSpec("_P")
-_R = TypeVar("R")
+_R = typing.TypeVar("_R")
 
 
 class _timeit(ContextDecorator):
@@ -19,8 +19,8 @@ class _timeit(ContextDecorator):
 
     def __init__(
         self,
-        identifier: str = None,
-        output: Callable = None,
+        identifier: typing.typing.Optional[str] = None,
+        output: typing.typing.Optional[typing.Callable] = None,
         use_perf_counter: bool = True,
     ) -> None:
         """
@@ -40,44 +40,45 @@ class _timeit(ContextDecorator):
         self.start = self.timer_func()
 
     def __exit__(self, *exc) -> None:
-        self.end = self.timer_func()
-        time_taken = self.end - self.start
-        if self.identifier:
-            self.output(f"'{self.identifier}' executed in {time_taken} seconds.\n")
-        else:
-            self.output(f"Execution took {time_taken} seconds.\n")
+        if self.start:
+            self.end = self.timer_func()
+            time_taken = self.end - self.start
+            if self.identifier:
+                self.output(f"'{self.identifier}' executed in {time_taken} seconds.\n")
+            else:
+                self.output(f"Execution took {time_taken} seconds.\n")
 
-    def __call__(self, func: Callable[_P, _R]) -> Callable[_P, _R]:
+    def __call__(self, func: typing.Callable[_P, _R]) -> typing.Callable[_P, _R]:
         self.identifier = self.identifier or func.__name__
         return super().__call__(func)
 
 
-@overload
+@typing.overload
 def timeit(
     identifier: str,
-    func: Optional[Callable[_P, _R]] = None,
+    func: typing.Optional[typing.Callable[_P, _R]] = None,
     *,
-    output: Optional[Callable] = None,
+    output: typing.Optional[typing.Callable] = None,
     use_perf_counter: bool = True,
-) -> Union[_timeit, Callable[_P, _R]]: ...
+) -> typing.Union[_timeit, typing.Callable[_P, _R]]: ...
 
 
-@overload
+@typing.overload
 def timeit(
-    func: Optional[Callable[_P, _R]] = None,
+    func: typing.Optional[typing.Callable[_P, _R]] = None,
     *,
-    identifier: Optional[str] = None,
-    output: Optional[Callable] = None,
+    identifier: typing.Optional[str] = None,
+    output: typing.Optional[typing.Callable] = None,
     use_perf_counter: bool = True,
-) -> Union[_timeit, Callable[_P, _R]]: ...
+) -> typing.Union[_timeit, typing.Callable[_P, _R]]: ...
 
 
-def timeit(
-    func: Optional[Callable[_P, _R]] = None,
-    identifier: Optional[str] = None,
-    output: Optional[Callable] = None,
+def timeit( # type: ignore
+    func: typing.Optional[typing.Callable[_P, _R]] = None,
+    identifier: typing.Optional[str] = None,
+    output: typing.Optional[typing.Callable] = None,
     use_perf_counter: bool = True,
-) -> Union[_timeit, Callable[_P, _R]]:
+) -> typing.Union[_timeit, typing.Callable[_P, _R]]:
     """
     Measure the time taken to execute a function or block of code.
 
@@ -125,9 +126,9 @@ class _Profiler(ContextDecorator):
 
     def __init__(
         self,
-        identifier: Optional[str] = None,
-        output: Optional[Callable] = None,
-        timeunit: Optional[float] = None,
+        identifier: typing.Optional[str] = None,
+        output: typing.Optional[typing.Callable] = None,
+        timeunit: typing.Optional[float] = None,
         builtins: bool = False,
     ) -> None:
         """
@@ -162,40 +163,40 @@ class _Profiler(ContextDecorator):
         else:
             self.output(f"=== Profiling Stats ===\n{info.lstrip()}")
 
-    def __call__(self, func: Callable[_P, _R]) -> Callable[_P, _R]:
+    def __call__(self, func: typing.Callable[_P, _R]) -> typing.Callable[_P, _R]:
         self.identifier = self.identifier or func.__name__
         return super().__call__(func)
 
 
-@overload
+@typing.overload
 def profileit(
     identifier: str,
-    func: Optional[Callable[_P, _R]] = None,
+    func: typing.Optional[typing.Callable[_P, _R]] = None,
     *,
-    output: Optional[Callable] = None,
-    timeunit: Optional[float] = None,
+    output: typing.Optional[typing.Callable] = None,
+    timeunit: typing.Optional[float] = None,
     builtins: bool = False,
-) -> Union[_Profiler, Callable[_P, _R]]: ...
+) -> typing.Union[_Profiler, typing.Callable[_P, _R]]: ...
 
 
-@overload
+@typing.overload
 def profileit(
-    func: Optional[Callable[_P, _R]] = None,
+    func: typing.Optional[typing.Callable[_P, _R]] = None,
     *,
-    identifier: Optional[str] = None,
-    output: Optional[Callable] = None,
-    timeunit: Optional[float] = None,
+    identifier: typing.Optional[str] = None,
+    output: typing.Optional[typing.Callable] = None,
+    timeunit: typing.Optional[float] = None,
     builtins: bool = False,
-) -> Union[_Profiler, Callable[_P, _R]]: ...
+) -> typing.Union[_Profiler, typing.Callable[_P, _R]]: ...
 
 
-def profileit(
-    func: Optional[Callable[_P, _R]] = None,
-    identifier: Optional[str] = None,
-    output: Optional[Callable] = None,
-    timeunit: Optional[float] = None,
+def profileit( # type: ignore
+    func: typing.Optional[typing.Callable[_P, _R]] = None,
+    identifier: typing.Optional[str] = None,
+    output: typing.Optional[typing.Callable] = None,
+    timeunit: typing.Optional[float] = None,
     builtins: bool = False,
-) -> Union[_Profiler, Callable[_P, _R]]:
+) -> typing.Union[_Profiler, typing.Callable[_P, _R]]:
     """
     Profile a function or block of code. Can be used as a decorator or context manager,
     similar to 'timeit'.

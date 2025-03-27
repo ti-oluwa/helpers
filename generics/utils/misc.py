@@ -1,34 +1,22 @@
 import copy
+from enum import Enum
 import sys
 import inspect
 import collections.abc
-from typing import (
-    Iterator,
-    TypeGuard,
-    Union,
-    Callable,
-    Any,
-    TypeVar,
-    Dict,
-    Type,
-    List,
-    Set,
-    Iterable,
-    AsyncIterator,
-    AsyncIterable,
-    Optional,
-    Tuple,
-    Sequence,
-)
+import typing
 import base64
 import functools
-from itertools import islice
-from typing_extensions import Buffer
-
-from .choice import ExtendedEnum
+from typing_extensions import Buffer, ParamSpec
 
 
-def get_memory_size(obj: Any, seen: Optional[Set[int]] = None) -> float:
+T = typing.TypeVar("T")
+P = ParamSpec("P")
+R = typing.TypeVar("R")
+
+
+def get_memory_size(
+    obj: typing.Any, seen: typing.Optional[typing.Set[int]] = None
+) -> float:
     """Recursively calculate the total memory size of an object and its references."""
     if seen is None:
         seen = set()
@@ -48,29 +36,34 @@ def get_memory_size(obj: Any, seen: Optional[Set[int]] = None) -> float:
     return size
 
 
-def has_method(obj: Any, method_name: str) -> bool:
+def has_method(obj: typing.Any, method_name: str) -> bool:
     """Check if an object or type has a specific method."""
     return callable(getattr(obj, method_name, None))
 
 
-def type_implements_iter(tp: Type[Any], /) -> bool:
+def type_implements_iter(tp: typing.Type[typing.Any], /) -> bool:
     """Check if the type has an __iter__ method (like lists, sets, etc.)."""
     return has_method(tp, "__iter__")
 
 
-def is_mapping(obj: Any) -> TypeGuard[collections.abc.Mapping]:
+def is_mapping(obj: typing.Any) -> typing.TypeGuard[collections.abc.Mapping]:
     """Check if an object is a mapping (like dict)."""
     return isinstance(obj, collections.abc.Mapping)
 
 
-def is_mapping_type(tp: Type[Any], /) -> TypeGuard[Type[collections.abc.Mapping]]:
+def is_mapping_type(
+    tp: typing.Type[typing.Any], /
+) -> typing.TypeGuard[typing.Type[collections.abc.Mapping]]:
     """Check if a given type is a mapping (like dict)."""
     return inspect.isclass(type) and issubclass(tp, collections.abc.Mapping)
 
 
 def is_iterable_type(
-    tp: Type[Any], /, *, exclude: Optional[Tuple[Type[Any], ...]] = None
-) -> TypeGuard[Type[collections.abc.Iterable]]:
+    tp: typing.Type[typing.Any],
+    /,
+    *,
+    exclude: typing.Optional[typing.Tuple[typing.Type[typing.Any], ...]] = None,
+) -> typing.TypeGuard[typing.Type[collections.abc.Iterable]]:
     """
     Check if a given type is an iterable.
 
@@ -91,18 +84,20 @@ def is_iterable_type(
 
 
 def is_iterable(
-    obj: Any, *, exclude: Optional[Tuple[Type[Any], ...]] = None
-) -> TypeGuard[collections.abc.Iterable]:
+    obj: typing.Any,
+    *,
+    exclude: typing.Optional[typing.Tuple[typing.Type[typing.Any], ...]] = None,
+) -> typing.TypeGuard[collections.abc.Iterable]:
     """Check if an object is an iterable."""
     return is_iterable_type(type(obj), exclude=exclude)
 
 
-def is_generic_type(tp: Any) -> bool:
+def is_generic_type(tp: typing.Any) -> bool:
     """Check if a type is a generic type like List[str], Dict[str, int], etc."""
     return hasattr(tp, "__origin__")
 
 
-def is_exception_class(exc) -> TypeGuard[Type[BaseException]]:
+def is_exception_class(exc) -> typing.TypeGuard[typing.Type[BaseException]]:
     return inspect.isclass(exc) and issubclass(exc, BaseException)
 
 
@@ -111,7 +106,7 @@ def str_to_base64(s: str, encoding: str = "utf-8") -> str:
     return bytes_to_base64(b)
 
 
-def bytes_to_base64(b: Union[Buffer, bytes]) -> str:
+def bytes_to_base64(b: typing.Union[Buffer, bytes]) -> str:
     """Convert bytes to a base64 encoded string."""
     return base64.b64encode(b).decode()
 
@@ -139,8 +134,8 @@ def bytes_is_base64(b: bytes) -> bool:
 
 
 def get_value_by_traversal_path(
-    data: Dict[str, Any], path: str, delimiter: str = "."
-) -> Union[Any, None]:
+    data: typing.Dict[str, typing.Any], path: str, delimiter: str = "."
+) -> typing.Union[typing.Any, None]:
     """
     Get the value from a nested dictionary using a traversal path.
 
@@ -159,8 +154,8 @@ def get_value_by_traversal_path(
 
 
 def get_attr_by_traversal_path(
-    obj: Any, path: str, delimiter: str = "."
-) -> Union[Any, None]:
+    obj: typing.Any, path: str, delimiter: str = "."
+) -> typing.Union[typing.Any, None]:
     """
     Get the attribute from an object using a traversal path.
 
@@ -178,7 +173,7 @@ def get_attr_by_traversal_path(
     return value
 
 
-def get_dict_diff(dict1: Dict, dict2: Dict) -> Dict:
+def get_dict_diff(dict1: typing.Dict, dict2: typing.Dict) -> typing.Dict:
     """
     Get the changes between two dictionaries
 
@@ -199,18 +194,18 @@ def get_dict_diff(dict1: Dict, dict2: Dict) -> Dict:
     return diff_dict
 
 
-_Mapping = TypeVar("_Mapping", bound=collections.abc.MutableMapping)
+_Mapping = typing.TypeVar("_Mapping", bound=collections.abc.MutableMapping)
 
 
 def merge_mappings(
     *mappings: _Mapping,
     merge_nested: bool = True,
-    merger: Optional[Callable[[_Mapping, _Mapping], _Mapping]] = None,
-    copier: Optional[Callable[[_Mapping], _Mapping]] = copy.copy,
+    merger: typing.Optional[typing.Callable[[_Mapping, _Mapping], _Mapping]] = None,
+    copier: typing.Optional[typing.Callable[[_Mapping], _Mapping]] = copy.copy,
 ) -> _Mapping:
     """
     Merges two or more mappings into a single mapping.
-    Starting from the back, each mapping is merged into the penultimate mapping.
+    Starting from the right to left, each mapping is merged into the penultimate mapping.
 
     For example, merging `{"a": 1, "b": 2}`, `{"b": 3, "c": 4}`, `{"c": 5, "d": 6}`
     would result in `{"a": 1, "b": 3, "c": 5, "d": 6}`.
@@ -292,9 +287,9 @@ def merge_mappings(
 _default_mappings_merger = functools.partial(merge_mappings, copier=None)
 
 
-# Left for compatibility where already in use
+# Deprecated: Use `merge_mappings` instead.
 def merge_dicts(
-    *dicts: Dict,
+    *dicts: typing.Dict,
     **kwargs,
 ):
     """
@@ -305,30 +300,32 @@ def merge_dicts(
     return merge_mappings(*dicts, **kwargs)
 
 
-def merge_enums(name, *enums) -> ExtendedEnum:
+def merge_enums(name: str, *enums: typing.Type[Enum]) -> typing.Type[Enum]:
     """
-    Merges multiple Enums into a single Enum.
+    Merges multiple Enum types into a single Enum type.
 
-    :param name: The name of the new Enum.
-    :param enums: The Enums to merge.
-    :return: A new Enum containing all the members from the provided Enums.
+    :param name: The name of the new Enum type.
+    :param enums: The Enum types to merge.
+    :return: A new Enum type containing all the members from the provided Enum types.
     """
-    members = {}
+    members: typing.Dict[str, typing.Any] = {}
     for enum in enums:
-        for member in enum:
+        for member in enum.__members__.values():  # type: ignore
             if member.name in members:
                 raise ValueError(f"Duplicate enum name found: {member.name}")
             members[member.name] = member.value
 
-    return ExtendedEnum(name, members)
+    return Enum(name, members)  # type: ignore
 
 
-def underscore_dict_keys(_dict: Dict[str, Any]) -> Dict[str, Any]:
+def underscore_dict_keys(
+    _dict: typing.Dict[str, typing.Any],
+) -> typing.Dict[str, typing.Any]:
     """Replaces all hyphens in the dictionary keys with underscores"""
     return {key.replace("-", "_"): value for key, value in _dict.items()}
 
 
-def comma_separated_to_int_float(value: str) -> Union[str, int, float]:
+def comma_separated_to_int_float(value: str) -> typing.Union[str, int, float]:
     """Convert a comma-separated string into a single integer or float by concatenating the numbers."""
     if not value:
         return 0
@@ -383,60 +380,6 @@ def python_type_to_html_input_type(py_type: type) -> str:
     return "text"
 
 
-T = TypeVar("T")
-
-
-def batched(i: Union[Iterator[T], Iterable[T]], batch_size: int):
-    """
-    Create batches of size n from the given iterable.
-
-    :param iterable: The iterable to split into batches.
-    :param batch_size: The batch size.
-    :yield: Batches of the iterable as lists.
-    """
-    iterator = iter(i)
-    while batch := list(islice(iterator, batch_size)):
-        yield batch
-
-
-async def async_batched(
-    async_iter: Union[AsyncIterable[T], AsyncIterator[T]], batch_size: int
-) -> AsyncIterator[List[T]]:
-    """
-    Create batches of size batch_size from the given async iterable.
-
-    :param async_iter: The async iterable to split into batches.
-    :param batch_size: The batch size.
-    :yield: Batches of the async iterable as lists.
-    """
-    batch = []
-    try:
-        async for item in async_iter:
-            batch.append(item)
-            if len(batch) == batch_size:
-                yield batch
-                batch = []
-
-        if batch:
-            yield batch
-    finally:
-        # Ensures that the inner async generator is closed 
-        # when the outer async generator is closed.
-        # Since the outer async generator is not yielding
-        # directly from the inner async generator
-        if inspect.isasyncgen(async_iter):
-            await async_iter.aclose()
-
-
-def shift(i: Sequence[T], /, *, step: int = 1) -> Sequence[T]:
-    """
-    Shifts the elements of an iterable by the given step
-
-    Use a negative step to shift the elements in the backwards direction.
-    """
-    return [*i[-step:], *i[:-step]]
-
-
 __all__ = [
     "is_iterable_type",
     "is_iterable",
@@ -455,7 +398,4 @@ __all__ = [
     "get_dict_diff",
     "underscore_dict_keys",
     "python_type_to_html_input_type",
-    "batched",
-    "async_batched",
-    "shift",
 ]

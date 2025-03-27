@@ -3,9 +3,9 @@ import functools
 import hashlib
 from annotated_types import Ge
 from starlette.websockets import WebSocket
-from starlette.requests import HTTPConnection
+from starlette.requests import Request
 from starlette.responses import Response
-import redis as pyredis
+from redis.exceptions import NoScriptError
 
 from .base import (
     APIThrottle,
@@ -56,7 +56,7 @@ class ThrottleMeta(type):
     def __new__(cls, name, bases, attrs):
         new_cls = super().__new__(cls, name, bases, attrs)
         new_cls.__call__ = cls._capture_no_limit(new_cls.__call__)
-        new_cls.get_key = cls._wrap_get_key(new_cls.get_key)
+        new_cls.get_key = cls._wrap_get_key(new_cls.get_key)  # type: ignore
         return new_cls
 
     @staticmethod
@@ -141,16 +141,22 @@ class BaseThrottle(typing.Generic[_HTTPConnection], metaclass=ThrottleMeta):
             will be throttled for the time returned and would have to wait for the time to elapse.
         """
         redis = APIThrottle.redis
+        if not redis:
+            raise Exception(
+                "APIThrottle has not been initialized. Call `APIThrottle.init` on FastAPI application startup"
+            )
         try:
             wait_period = await redis.evalsha(
-                APIThrottle.lua_sha, 1, key, str(self.limit), str(self.milliseconds)
-            )
-        except pyredis.exceptions.NoScriptError:
-            APIThrottle.lua_sha = await APIThrottle.redis.script_load(
-                APIThrottle.lua_script
-            )
+                APIThrottle.lua_sha or "",
+                1,
+                key,
+                str(self.limit),
+                str(self.milliseconds),
+            )  # type: ignore
+        except NoScriptError:
+            APIThrottle.lua_sha = await redis.script_load(APIThrottle.lua_script)
             wait_period = await self.get_wait_period(key)
-        return wait_period
+        return int(wait_period)
 
     async def __call__(self, connection: _HTTPConnection, *args, **kwargs):
         if not APIThrottle.redis:
@@ -163,7 +169,7 @@ class BaseThrottle(typing.Generic[_HTTPConnection], metaclass=ThrottleMeta):
         connection_throttled = (
             self.connection_throttled or APIThrottle.connection_throttled
         )
-        if wait_period != 0:
+        if wait_period != 0 and connection_throttled:
             return await connection_throttled(connection, wait_period, *args, **kwargs)
         return None
 
@@ -177,10 +183,10 @@ class BaseThrottle(typing.Generic[_HTTPConnection], metaclass=ThrottleMeta):
         raise NotImplementedError
 
 
-class HTTPThrottle(BaseThrottle[HTTPConnection]):
+class HTTPThrottle(BaseThrottle[Request]):
     """Generic throttle for HTTP connections"""
 
-    async def get_key(self, request: HTTPConnection, response: Response) -> str:
+    async def get_key(self, request: Request, response: Response) -> str:
         route_index = 0
         dependency_index = 0
         for i, route in enumerate(request.app.routes):
@@ -192,6 +198,9 @@ class HTTPThrottle(BaseThrottle[HTTPConnection]):
                         break
 
         identifier = self.identifier or APIThrottle.identifier
+        if not identifier:
+            raise ValueError("No identifier provided for throttle")
+
         rate_key = await identifier(request)
         key_suffix = f"{rate_key}:{route_index}:{dependency_index}:{id(self)}"
         key_suffix_hash = hashlib.md5(key_suffix.encode()).hexdigest()
@@ -201,7 +210,7 @@ class HTTPThrottle(BaseThrottle[HTTPConnection]):
         # used with the `throttle` decorator.
         return key
 
-    async def __call__(self, connection: HTTPConnection, response: Response):
+    async def __call__(self, connection: Request, response: Response):
         return await super().__call__(connection, response=response)
 
 
@@ -210,6 +219,8 @@ class WebSocketThrottle(BaseThrottle[WebSocket]):
 
     async def get_key(self, connection: WebSocket, context_key="") -> str:
         identifier = self.identifier or APIThrottle.identifier
+        if not identifier:
+            raise ValueError("No identifier provided for throttle")
         rate_key = await identifier(connection)
         key_suffix = f"{rate_key}:{connection.url.path}:{id(self)}:{context_key}"
         key_suffix_hash = hashlib.md5(key_suffix.encode()).hexdigest()

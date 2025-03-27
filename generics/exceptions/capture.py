@@ -5,7 +5,8 @@ Use an appropriate `ExceptionCaptured` exception handler` to enable exception ca
 Or use the `capture.enable` decorator to enable for specific controllers only.
 """
 
-from gc import callbacks
+import copy
+import logging
 import json
 import typing
 import functools
@@ -18,6 +19,7 @@ from helpers.dependencies import depends_on
 from helpers.logging import log_exception
 from helpers.generics.utils.misc import is_iterable, is_exception_class, is_mapping
 from helpers.generics.typing import Function, CoroutineFunction
+from helpers.generics.utils.caching import lru_cache
 
 # Why this you say? I'm just too lazy to catch exceptions myself. I know. Its overkill.
 
@@ -30,7 +32,7 @@ _TEXT_PREFIX = "text/"
 _JSON_SUFFIX = "+json"
 
 
-@functools.lru_cache(maxsize=128)
+@lru_cache(maxsize=128)
 def is_text_content_type(content_type: str) -> bool:
     """Return True if the content type is a text content type. Otherwise, False."""
     return (
@@ -40,7 +42,7 @@ def is_text_content_type(content_type: str) -> bool:
     )
 
 
-@functools.lru_cache(maxsize=32)
+@lru_cache(maxsize=32)
 def is_json_content_type(content_type: str) -> bool:
     """Return True if the content type is a JSON content type. Otherwise, False."""
     return content_type == _JSON_CONTENT_TYPE
@@ -52,19 +54,19 @@ class Response(typing.Protocol):
     """
 
     status_code: int
-    headers: typing.Mapping[str, str]
-    body: typing.Iterable[typing.Any]
+    headers: typing.Any
+    body: typing.Any
 
 
-ResponseType = typing.TypeVar("ResponseType", bound=Response)
+ResponseType = typing.TypeVar("ResponseType", bound=Response, covariant=True)
 ControllerFunc = typing.Union[
     Function[P, ResponseType], CoroutineFunction[P, ResponseType]
 ]
-ExceptionType = typing.TypeVar("ExceptionType", bound=BaseException)
+ExceptionType = typing.TypeVar("ExceptionType", bound=BaseException, contravariant=True)
 
 
 class DjangoControllerClass(typing.Generic[ResponseType], typing.Protocol):
-    http_method_names: list[str] = ...
+    http_method_names: list[str]
 
     @classmethod
     def as_view(
@@ -78,7 +80,7 @@ class DjangoControllerClass(typing.Generic[ResponseType], typing.Protocol):
     def options(self, *args: typing.Any, **kwargs: typing.Any) -> ResponseType: ...
 
 
-class ControllerContextDecorator:
+class ControllerContextDecorator(typing.Generic[ExceptionType, ResponseType]):
     """
     Context decorator interface.
 
@@ -139,7 +141,7 @@ class ControllerContextDecorator:
 
         for method_name in controller_cls.http_method_names:
             method_name = method_name.lower()
-            handler: ControllerFunc[P, ResponseType] = getattr(
+            handler: typing.Optional[ControllerFunc] = getattr(
                 controller_cls, method_name, None
             )
             if not handler or not callable(handler):
@@ -151,18 +153,25 @@ class ControllerContextDecorator:
         self, controller_func: ControllerFunc[P, ResponseType]
     ) -> ControllerFunc[P, ResponseType]:
         """Decorate function-based controller."""
+        wrapper = None
         if iscoroutinefunction(controller_func):
 
-            async def wrapper(*args: P.args, **kwargs: P.kwargs) -> ResponseType:
+            @functools.wraps(controller_func)
+            async def async_wrapper(*args: P.args, **kwargs: P.kwargs) -> ResponseType:
                 async with self:
                     return await controller_func(*args, **kwargs)
+
+            wrapper = async_wrapper
         else:
 
-            def wrapper(*args: P.args, **kwargs: P.kwargs) -> ResponseType:
+            @functools.wraps(controller_func)
+            def sync_wrapper(*args: P.args, **kwargs: P.kwargs) -> ResponseType:
                 with self:
-                    return controller_func(*args, **kwargs)
+                    return controller_func(*args, **kwargs)  # type: ignore
 
-        return functools.update_wrapper(wrapper, controller_func)
+            wrapper = sync_wrapper
+
+        return wrapper
 
     @classmethod
     @depends_on({"asgiref": "asgiref"})
@@ -178,7 +187,7 @@ class ControllerContextDecorator:
         """
         from asgiref.sync import sync_to_async
 
-        return sync_to_async(sync_func, thread_sensitive=True)(*args, **kwargs)
+        return await sync_to_async(sync_func, thread_sensitive=True)(*args, **kwargs)
 
     @classmethod
     @depends_on({"asgiref": "asgiref"})
@@ -213,36 +222,42 @@ class ControllerContextDecorator:
         return await self.run_async(self.__exit__, exc_type, exc_value, traceback)
 
 
-class ExceptionCallback(typing.Protocol[ExceptionType]):
+P = ParamSpec("P")
+R = typing.TypeVar("R", covariant=True)
+
+
+class ExceptionCallback(typing.Generic[ExceptionType, P, R], typing.Protocol):
     """Protocol defining the interface for exception callbacks"""
 
     def __call__(
-        self, exc: ExceptionType, *args: typing.Any, **kwargs: typing.Any
-    ) -> typing.Optional[typing.Awaitable[None]]: ...
+        self, exc: ExceptionType, *args: P.args, **kwargs: P.kwargs
+    ) -> typing.Union[R, typing.Awaitable[R]]: ...
 
 
 @functools.total_ordering
 @dataclass(frozen=True)  # Ensure immutability due to ordering and caching
-class PrioritizedCallback(typing.Generic[ExceptionType]):
+class PrioritizedCallback(typing.Generic[ExceptionType, P, R]):
     """Callback with priority and instance-specific order tracking"""
 
-    callback: ExceptionCallback[ExceptionType]
+    callback: ExceptionCallback[ExceptionType, P, R]
     priority: typing.Union[int, float] = 0
     args: typing.Tuple[typing.Any, ...] = field(default_factory=tuple)
     kwargs: typing.Dict[str, typing.Any] = field(default_factory=dict)
     # Track order within specific captor instance
     _order: int = field(default=0)
 
-    def __call__(self, exc: ExceptionType, **kwargs: typing.Any) -> None:
+    def __call__(
+        self, exc: ExceptionType, **kwargs: typing.Any
+    ) -> typing.Union[R, typing.Awaitable[R]]:
         return self.callback(exc, *self.args, **{**self.kwargs, **kwargs})
 
-    def __lt__(self, other: "PrioritizedCallback[ExceptionType]") -> bool:
+    def __lt__(self, other: typing.Any) -> bool:
         if not isinstance(other, PrioritizedCallback):
             return NotImplemented
         return (-self.priority, self._order) < (-other.priority, other._order)
 
     @functools.cached_property
-    def is_async(self) -> bool:
+    def is_async(self):
         """Return True if the callback is an async type. Otherwise, False."""
         return iscoroutinefunction(self.callback)
 
@@ -308,9 +323,7 @@ _CAPTURE_ENABLED_ATTR = "__capture_enabled"
 _WRAPPED_CONTROLLER_ATTR = "wrapped_controller"
 
 
-class ExceptionCaptor(
-    typing.Generic[ExceptionType, ResponseType], ControllerContextDecorator
-):
+class ExceptionCaptor(ControllerContextDecorator[ExceptionType, ResponseType]):
     """
     Captures and constructs a structured error response from exceptions.
 
@@ -351,7 +364,7 @@ class ExceptionCaptor(
     ```
     """
 
-    EXCEPTION_CODES: typing.Mapping[typing.Type[ExceptionType], int] = {}
+    EXCEPTION_CODES: typing.Mapping[typing.Type[BaseException], int] = {}
     """
     A mapping of special exceptions to the preferred status codes to be used for them
     when constructing response.
@@ -391,7 +404,8 @@ class ExceptionCaptor(
     ] = None
     """The default response formatter to be used by instances."""
 
-    class ExceptionCaptured(typing.Generic[ExceptionType, ResponseType], Exception):
+    @typing.final
+    class ExceptionCaptured(Exception, typing.Generic[ExceptionType, ResponseType]):  # type: ignore
         """Raised when an exception is captured by an ExceptionCaptor instance."""
 
         __outer__ = None
@@ -402,10 +416,10 @@ class ExceptionCaptor(
             captor: "ExceptionCaptor[ExceptionType, ResponseType]",
             response: ResponseType,
         ) -> None:
+            super().__init__(captive)
             self.captive = captive
             self.response = response
             self.captor = captor
-            super().__init__(captive)
 
     def __init__(
         self,
@@ -419,7 +433,7 @@ class ExceptionCaptor(
         *,
         code: typing.Optional[int] = None,
         response_type: typing.Optional[ResponseType] = None,
-        response_kwargs: typing.Optional[typing.Mapping[str, typing.Any]] = None,
+        response_kwargs: typing.Optional[typing.MutableMapping[str, typing.Any]] = None,
         response_formatter: typing.Optional[
             typing.Union[
                 Function[[ResponseType], ResponseType],
@@ -429,11 +443,12 @@ class ExceptionCaptor(
         prioritize_content: bool = False,
         callback: typing.Optional[
             typing.Union[
-                ExceptionCallback[ExceptionType],
-                PrioritizedCallback[ExceptionType],
+                ExceptionCallback[ExceptionType, P, R],
+                PrioritizedCallback[ExceptionType, P, R],
             ]
         ] = None,
-        log_exceptions: bool = True,
+        log_errors: bool = True,
+        logger: typing.Optional[typing.Union[str, logging.Logger]] = None,
     ) -> None:
         """
         Initialize the `ExceptionCaptor` instance.
@@ -451,17 +466,19 @@ class ExceptionCaptor(
         :param callback: A callback to be called on exception capture. Should take the exception as an argument.
             By default, callback added on instantiation will have the highest priority, no matter the order of addition.
             However, the callback this can be circumvented by providing an already created `PrioritizedCallback` instance.
-        :param log_exceptions: Whether to log critical exceptions (like server errors). Defaults to True
+        :param log_errors: Whether to log critical exceptions (like server errors) or errors during captured
+            exception processing. Defaults to True.
+        :param logger: The logger to use for logging exceptions. Defaults to the module logger.
         """
-        target = target or (BaseException,)
-        if not is_iterable(target):
-            target = (target,)
+        target_exceptions = target or (BaseException,)
+        if not is_iterable(target_exceptions):
+            target_exceptions = (target_exceptions,)
 
-        for exc_class in target:
+        for exc_class in target_exceptions:
             if not is_exception_class(exc_class):
                 raise ValueError("target should only hold exception classes")
 
-        self.target = tuple(target)
+        self.target = tuple(target_exceptions)
         self.content = content
         self.prioritize_content = prioritize_content
         self.code = code or type(self).DEFAULT_STATUS_CODE
@@ -481,11 +498,18 @@ class ExceptionCaptor(
             response_formatter or type(self).DEFAULT_RESPONSE_FORMATTER
         )
         self._callback_counter: int = 0
-        self.callbacks: typing.List[PrioritizedCallback[ExceptionType]] = []
+        self.callbacks: typing.List[PrioritizedCallback] = []
         if callback:
             # Callback added on instantiation should have the highest priority
             self.add_callback(callback, priority=float("inf"))
-        self.log_exceptions = log_exceptions
+        self.log_errors = log_errors
+        self.logger = (
+            logger
+            if isinstance(logger, logging.Logger)
+            else logging.getLogger(logger or __name__)
+        )
+        self._init_args = ()
+        self._init_kwargs = {}
 
     def __new__(cls, *args, **kwargs):
         instance = super().__new__(cls)
@@ -575,16 +599,16 @@ class ExceptionCaptor(
         else:
             code = self.code
             if hasattr(exc, "status_code"):
-                code = exc.status_code
+                code = exc.status_code  # type: ignore
             elif hasattr(exc, "code"):
-                code = exc.code
+                code = exc.code  # type: ignore
         return int(code)
 
     def prepare_response_kwargs(
         self, exc: ExceptionType
     ) -> typing.Dict[str, typing.Any]:
         """Prepares and returns the keyword arguments for the response constructor."""
-        kwargs = self.response_kwargs.copy()
+        kwargs = copy.copy(self.response_kwargs)
         headers = kwargs.get("headers", {})
         if headers and "Content-Type" in headers:
             # Header's "Content-Type" takes precedence over `CONTENT_TYPE_KWARG`
@@ -598,7 +622,7 @@ class ExceptionCaptor(
         """Construct the response to be returned."""
         content = self.prepare_response_content(exc)
         kwargs = self.prepare_response_kwargs(exc)
-        return self.response_type(content, **kwargs)
+        return self.response_type(content, **kwargs)  # type: ignore
 
     def raise_exception_captured(self, exc: ExceptionType) -> typing.NoReturn:
         """Re-raise the captured exception as an `ExceptionCaptured` exception."""
@@ -610,13 +634,13 @@ class ExceptionCaptor(
             else:
                 formatted_response = self.response_formatter(response)
 
-        if formatted_response.status_code >= 500 and self.log_exceptions:
-            log_exception(exc)
+        if formatted_response.status_code >= 500 and self.log_errors:  # type: ignore
+            log_exception(exc, logger=self.logger)
 
         raise type(self).ExceptionCaptured(
             captive=exc,
             captor=self,
-            response=formatted_response,
+            response=formatted_response,  # type: ignore
         ) from exc  # Preserve exception context for easier debugging
 
     async def async_raise_exception_captured(
@@ -633,18 +657,18 @@ class ExceptionCaptor(
                     self.response_formatter, response
                 )
 
-        if formatted_response.status_code >= 500 and self.log_exceptions:
-            log_exception(exc)
+        if formatted_response.status_code >= 500 and self.log_errors:  # type: ignore
+            await self.run_async(log_exception, exc, logger=self.logger)
         raise type(self).ExceptionCaptured(
             captive=exc,
             captor=self,
-            response=formatted_response,
+            response=formatted_response,  # type: ignore
         ) from exc
 
     @typing.overload
     def add_callback(
         self,
-        callback: ExceptionCallback[ExceptionType],
+        callback: ExceptionCallback[ExceptionType, P, R],
         priority: typing.Union[int, float] = 0,
         *args: typing.Any,
         **kwargs: typing.Any,
@@ -653,7 +677,10 @@ class ExceptionCaptor(
     @typing.overload
     def add_callback(
         self,
-        callback: PrioritizedCallback[ExceptionType],
+        callback: PrioritizedCallback[ExceptionType, P, R],
+        priority: typing.Union[int, float] = 0,
+        *args: typing.Any,
+        **kwargs: typing.Any,
     ) -> None: ...
 
     # Sorting the callbacks by priority should be done on execution
@@ -662,8 +689,8 @@ class ExceptionCaptor(
     def add_callback(
         self,
         callback: typing.Union[
-            ExceptionCallback[ExceptionType],
-            PrioritizedCallback[ExceptionType],
+            ExceptionCallback[ExceptionType, P, R],
+            PrioritizedCallback[ExceptionType, P, R],
         ],
         priority: typing.Union[int, float] = 0,
         *args: typing.Any,
@@ -724,8 +751,8 @@ class ExceptionCaptor(
                 else:
                     callback(exc)
             except BaseException as e:
-                if self.log_exceptions:
-                    log_exception(e)
+                if self.log_errors:
+                    log_exception(e, logger=self.logger)
                 pass
         return
 
@@ -738,14 +765,16 @@ class ExceptionCaptor(
                 else:
                     await self.run_async(callback, exc)
             except BaseException as e:
-                if self.log_exceptions:
-                    log_exception(e)
+                if self.log_errors:
+                    await self.run_async(log_exception, e, logger=self.logger)
                 pass
         return
 
     def __enter__(self):
         if not self.response_type:
-            raise RuntimeError("response_type must be set before using as context manager")
+            raise RuntimeError(
+                "response_type must be set before using as context manager"
+            )
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
@@ -757,7 +786,9 @@ class ExceptionCaptor(
 
     async def __aenter__(self):
         if not self.response_type:
-            raise RuntimeError("response_type must be set before using as context manager")
+            raise RuntimeError(
+                "response_type must be set before using as context manager"
+            )
         return self
 
     async def __aexit__(self, exc_type, exc_value, traceback):
@@ -838,26 +869,33 @@ class ExceptionCaptor(
                 setattr(controller, method_name, enable(method))
             return controller
 
+        wrapper = None
         if iscoroutinefunction(controller):
 
-            async def wrapper(*args: P.args, **kwargs: P.kwargs) -> ResponseType:
+            @functools.wraps(controller)
+            async def sync_wrapper(*args: P.args, **kwargs: P.kwargs) -> ResponseType:
                 try:
                     return await getattr(wrapper, _WRAPPED_CONTROLLER_ATTR)(
                         *args, **kwargs
                     )
                 except cls.ExceptionCaptured as exc:
                     return exc.response
+
+            wrapper = sync_wrapper
         else:
 
-            def wrapper(*args: P.args, **kwargs: P.kwargs) -> ResponseType:
+            @functools.wraps(controller)
+            def async_wrapper(*args: P.args, **kwargs: P.kwargs) -> ResponseType:
                 try:
                     return getattr(wrapper, _WRAPPED_CONTROLLER_ATTR)(*args, **kwargs)
                 except cls.ExceptionCaptured as exc:
                     return exc.response
 
+            wrapper = async_wrapper
+
         setattr(wrapper, _CAPTURE_ENABLED_ATTR, True)
         setattr(wrapper, _WRAPPED_CONTROLLER_ATTR, controller)
-        return functools.update_wrapper(wrapper, controller)
+        return wrapper
 
 
 ####### EXPORT ALIASES #######

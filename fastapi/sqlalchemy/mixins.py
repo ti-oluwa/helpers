@@ -1,5 +1,4 @@
 import datetime
-from tkinter import N
 import typing
 import uuid
 import sqlalchemy as sa
@@ -8,10 +7,10 @@ from sqlalchemy import orm
 from helpers.fastapi.utils import timezone
 
 
-def uuid7(as_type: typing.Optional[typing.Union[str, type]] = uuid.UUID) -> uuid.UUID:
+def uuid7(as_type: typing.Optional[typing.Union[str, type]] = uuid.UUID):
     from uuid_extensions import uuid7
 
-    return uuid7(as_type=as_type)
+    return uuid7(as_type=as_type) # type: ignore
 
 
 @orm.declarative_mixin

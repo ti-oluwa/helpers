@@ -1,3 +1,4 @@
+from enum import Enum
 import typing
 from contextlib import asynccontextmanager
 from channels.generic.websocket import AsyncConsumer
@@ -11,12 +12,10 @@ from .events import (
     EventStatus,
     EventType,
     BaseEventType,
-    _EventType,
 )
 from .exceptions import UnsupportedEvent
 from helpers.logging import log_exception
 from helpers.generics.utils.misc import merge_enums
-from helpers.generics.utils.choice import ExtendedEnum
 
 
 ERROR_ATTRIBUTES = ("detail", "message_dict", "error_dict", "error_list")
@@ -48,7 +47,8 @@ def _clean_errors(errors: typing.Any):
 
 @asynccontextmanager
 async def capture_exception(
-    consumer: AsyncConsumer, exc_class: typing.Type[Exception] = None
+    consumer: AsyncConsumer,
+    exc_class: typing.Optional[typing.Type[BaseException]] = None,
 ):
     """
     Captures any exceptions that occurs within the context.
@@ -59,7 +59,7 @@ async def capture_exception(
     :param consumer: the async consumer in/for which this context manager is being used.
     :param exc_class: The base exception class to target
     """
-    exc_class = exc_class or Exception
+    exc_class = exc_class or BaseException
     try:
         yield
     except exc_class as exc:
@@ -94,7 +94,7 @@ class AsyncJsonWebsocketEventConsumerMeta(type):
     """Async JSON websocket event consumer meta class"""
 
     @staticmethod
-    def _add_event_send_handler(
+    def add_event_send_handler(
         consumer_cls: typing.Type[_AsyncJSONConsumer], event: str
     ):
         async def send_handler(self: _AsyncJSONConsumer, event):
@@ -104,16 +104,16 @@ class AsyncJsonWebsocketEventConsumerMeta(type):
         setattr(consumer_cls, event, send_handler)
         return consumer_cls
 
-    def __new__(meta_cls, name, bases, attrs, **kwargs):
-        consumer_cls: _AsyncJSONConsumer = super().__new__(
-            meta_cls, name, bases, attrs, **kwargs
+    def __new__(cls, name, bases, attrs, **kwargs):
+        consumer_cls: AsyncJsonWebsocketConsumer = super().__new__(
+            cls, name, bases, attrs, **kwargs
         )
         # Auto add sending handler for event defined by `consumer_cls.event_type_enum`
-        for event in consumer_cls.get_event_type_enum().list():
-            send_handler = getattr(consumer_cls, event, None)
+        for event_type in consumer_cls.get_event_type_enum():
+            send_handler = getattr(consumer_cls, event_type.value, None)
             if send_handler and inspect.isroutine(send_handler):
                 continue
-            meta_cls._add_event_send_handler(consumer_cls, event)
+            cls.add_event_send_handler(consumer_cls, event_type.value)
 
         return consumer_cls
 
@@ -129,7 +129,7 @@ class AsyncJsonWebsocketEventConsumer(
     on events
     """
 
-    event_type_enum: typing.Type[_EventType] = EventType
+    event_type_enum: typing.Type[BaseEventType] = EventType
     """Enumeration of expected/acceptable event types accepted or sent by the consumer"""
     ignore_unsupported_events: bool = False
     """
@@ -166,7 +166,7 @@ class AsyncJsonWebsocketEventConsumer(
 
     @classmethod
     @functools.cache
-    def get_event_type_enum(cls) -> ExtendedEnum:
+    def get_event_type_enum(cls) -> typing.Type[Enum]:
         # Merge the specific event type class and the default one
         # so default events can also be accepted
         return merge_enums(
