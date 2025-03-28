@@ -4,6 +4,8 @@ from typing import Dict, Mapping, Union, Any
 
 from starlette.types import ASGIApp, Receive, Scope, Send
 from starlette.responses import Response
+from starlette import status
+from starlette.websockets import WebSocketClose
 
 from helpers.fastapi.exceptions import ImproperlyConfigured
 from helpers.fastapi.config import settings
@@ -105,15 +107,24 @@ class MaintenanceMiddleware:
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         """Process the request."""
-        if scope["type"] != "http":
-            await self.app(scope, receive, send)
-            return
-
         if self.maintenance_mode_on:
-            content = await self.get_response_content()
-            headers = await self.get_response_headers()
-            response = Response(content, status_code=503, headers=headers)
-            await response(scope, receive, send)
-            return
+            if scope["type"] == "http":
+                content = await self.get_response_content()
+                headers = await self.get_response_headers()
+                response = Response(
+                    content,
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    headers=headers,
+                )
+                await response(scope, receive, send)
+                return
+
+            elif scope["type"] == "websocket":
+                websocket_close = WebSocketClose(
+                    code=status.WS_1001_GOING_AWAY,
+                    reason="Service Unavailable",
+                )
+                await websocket_close(scope, receive, send)
+                return
 
         await self.app(scope, receive, send)

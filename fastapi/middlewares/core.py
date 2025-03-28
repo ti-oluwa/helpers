@@ -7,7 +7,9 @@ import fastapi
 from collections.abc import Mapping
 from starlette.types import ASGIApp, Receive, Scope, Send, Message
 from starlette.requests import HTTPConnection
-from starlette.responses import JSONResponse
+from starlette.websockets import WebSocketClose
+from starlette import status
+from starlette.responses import Response
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from helpers.fastapi.config import settings
@@ -18,6 +20,7 @@ from helpers.generics.utils.module_loading import import_string
 url_path_string_re = (
     r"[\w\-.~:/?#\[\]@!$&'()*+,;=]+"  # regex pattern for possible url path string
 )
+ALLOWED_CONNECTION_TYPES = {"http", "websocket"}
 
 
 def urlstring_to_re(urlstring: str) -> re.Pattern[str]:
@@ -65,7 +68,7 @@ class AllowedIPsMiddleware:
         ]
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        if scope["type"] != "http":
+        if scope["type"] not in ALLOWED_CONNECTION_TYPES:
             await self.app(scope, receive, send)
             return
 
@@ -79,8 +82,18 @@ class AllowedIPsMiddleware:
                 await self.app(scope, receive, send)
                 return
 
-        response = JSONResponse({"detail": "Access disallowed."}, status_code=403)
-        await response(scope, receive, send)
+        if scope["type"] == "websocket":
+            websocket_close = WebSocketClose(
+                code=status.WS_1008_POLICY_VIOLATION,
+                reason="Access disallowed!",
+            )
+            await websocket_close(scope, receive, send)
+        else:
+            response = Response(
+                "Access disallowed!",
+                status_code=status.HTTP_403_FORBIDDEN,
+            )
+            await response(scope, receive, send)
 
 
 class HostBlacklistMiddleware:
@@ -106,8 +119,20 @@ class HostBlacklistMiddleware:
             return
 
         for host in self.blacklisted_hosts:
-            if host.match(hostname):
-                response = JSONResponse({"detail": "Access denied."}, status_code=403)
+            if not host.match(hostname):
+                continue
+
+            if scope["type"] == "websocket":
+                websocket_close = WebSocketClose(
+                    code=status.WS_1008_POLICY_VIOLATION,
+                    reason="Access disallowed!",
+                )
+                await websocket_close(scope, receive, send)
+            else:
+                response = Response(
+                    "Access disallowed!",
+                    status_code=status.HTTP_403_FORBIDDEN,
+                )
                 await response(scope, receive, send)
                 return
 
@@ -136,8 +161,20 @@ class IPBlacklistMiddleware:
             return
 
         for ip in self.blacklisted_ips:
-            if ip.match(client_ip.exploded):
-                response = JSONResponse({"detail": "Access denied."}, status_code=403)
+            if not ip.match(client_ip.exploded):
+                continue
+
+            if scope["type"] == "websocket":
+                websocket_close = WebSocketClose(
+                    code=status.WS_1008_POLICY_VIOLATION,
+                    reason="Access disallowed!",
+                )
+                await websocket_close(scope, receive, send)
+            else:
+                response = Response(
+                    "Access disallowed!",
+                    status_code=status.HTTP_403_FORBIDDEN,
+                )
                 await response(scope, receive, send)
                 return
 
