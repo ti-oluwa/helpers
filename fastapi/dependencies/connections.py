@@ -43,7 +43,7 @@ def db_session(db_session: AnyDBSession, connection: HTTPConnection) -> Session:
         return raise_http_exception(
             connection,
             status_code=500,
-            message="Synchronous database connection unavailable",
+            detail="Synchronous database connection unavailable",
         )
     return db_session
 
@@ -74,7 +74,7 @@ def async_db_session(
         return raise_http_exception(
             connection,
             status_code=500,
-            message="Asynchronous database connection unavailable",
+            detail="Asynchronous database connection unavailable",
         )
     return db_session
 

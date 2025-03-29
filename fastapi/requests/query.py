@@ -114,7 +114,6 @@ def ordering_query_parser_factory(
         else:
             ordering_columns = ordering
 
-        print(ordering_columns)
         check_columns = allowed_columns is not None
         if check_columns and not allowed_columns:
             raise ValueError("allowed_columns must not be an empty set")
