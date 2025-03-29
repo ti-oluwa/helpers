@@ -1,6 +1,7 @@
 import sqlalchemy as sa
 import sqlalchemy_utils as sa_utils
 import base64
+import typing
 import time
 import fastapi
 
@@ -10,7 +11,11 @@ from helpers.fastapi.config import settings
 from helpers.fastapi.utils.requests import get_ip_address
 
 
-class TimeBasedOTP(mixins.TimestampMixin, mixins.UUID7PrimaryKeyMixin, models.Model):
+class TimeBasedOTP(  # type: ignore
+    mixins.TimestampMixin,
+    mixins.UUID7PrimaryKeyMixin,
+    models.Model,
+):
     """Model representing a time-based one-time password."""
 
     __abstract__ = True
@@ -51,8 +56,8 @@ class TimeBasedOTP(mixins.TimestampMixin, mixins.UUID7PrimaryKeyMixin, models.Mo
         """Constructs and returns a `TOTP` representation of the instance"""
         totp = TOTP(
             key=base64.b64encode(self.key.encode()),
-            step=self.validity_period,
-            digits=self.length,
+            step=self.validity_period,  # type: ignore
+            digits=self.length,  # type: ignore
         )
         # the current time will be used to generate a counter
         totp.time = time.time()
@@ -61,11 +66,15 @@ class TimeBasedOTP(mixins.TimestampMixin, mixins.UUID7PrimaryKeyMixin, models.Mo
     def token(self) -> str:
         """The OTP token"""
         totp = self.totp()
-        token = str(totp.token()).zfill(self.length)
+        token = str(totp.token()).zfill(self.length)  # type: ignore
         return token
 
     def verify_token(
-        self, token: str, *, request: fastapi.Request = None, tolerance: int = 0
+        self,
+        token: str,
+        *,
+        request: typing.Optional[fastapi.Request] = None,
+        tolerance: int = 0,
     ) -> bool:
         """
         Verifies the OTP token.
@@ -75,7 +84,7 @@ class TimeBasedOTP(mixins.TimestampMixin, mixins.UUID7PrimaryKeyMixin, models.Mo
         :param tolerance: Number of seconds to allow for clock drift
         """
         try:
-            token = int(token)
+            int_token = int(token)
         except ValueError:
             return False
 
@@ -83,7 +92,7 @@ class TimeBasedOTP(mixins.TimestampMixin, mixins.UUID7PrimaryKeyMixin, models.Mo
         # Ensure that the same device/machine that
         # requested the token's creation is the one verifying
         if (ip_address and self.requestor_ip_address) and (
-            ip_address != str(self.requestor_ip_address)
+            ip_address != str(self.requestor_ip_address)  # type: ignore
         ):
             return False
 
@@ -91,8 +100,8 @@ class TimeBasedOTP(mixins.TimestampMixin, mixins.UUID7PrimaryKeyMixin, models.Mo
         # check if the current counter value is higher than the value of
         # last verified counter and check if entered token is correct by
         # calling totp.verify_token()
-        if (totp.t() > self.last_verified_counter) and totp.verify(
-            token, tolerance=tolerance
+        if (totp.t() > self.last_verified_counter) and totp.verify(  # type: ignore
+            int_token, tolerance=tolerance
         ):
             # if the condition is true, set the last verified counter value
             # to current counter value, and return True

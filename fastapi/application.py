@@ -1,4 +1,4 @@
-from typing import Callable, Dict, Type, Optional
+import typing
 import fastapi
 
 from .middlewares.core import apply_middleware
@@ -7,20 +7,20 @@ from .config import settings
 from helpers.generics.utils.module_loading import import_string
 
 
-SetupName = Type[str]
+SetupName: typing.TypeAlias = str
 """Setup name"""
-SetupFunc = Callable[[fastapi.FastAPI], fastapi.FastAPI]
+SetupFunc = typing.Callable[[fastapi.FastAPI], fastapi.FastAPI]
 """Setup function - takes a (FastAPI) application and performs some post initialization setup on it"""
 
-SETUPS: Dict[SetupName, SetupFunc] = {
-    "apply_middleware": apply_middleware, # default middleware setup
+SETUPS: typing.Dict[SetupName, SetupFunc] = {
+    "apply_middleware": apply_middleware,  # default middleware setup
 }
 """Registered application setups"""
 
 
 def app_setup(
-    setup: Optional[SetupFunc] = None, name: Optional[SetupName] = None
-) -> SetupFunc | Callable[[SetupFunc], SetupFunc]:
+    setup: typing.Optional[SetupFunc] = None, name: typing.Optional[SetupName] = None
+) -> SetupFunc | typing.Callable[[SetupFunc], SetupFunc]:
     """
     Installs a new FastAPI application setup function.
 
@@ -70,12 +70,10 @@ def exception_handlers():
     for exc, handler_path in settings.EXCEPTION_HANDLERS.items():
         if not issubclass(exc, Exception):
             if isinstance(exc, str):
-               exc = import_string(exc)
+                exc = import_string(exc)
             else:
-                raise ValueError(
-                    "Key in EXCEPTION_HANDLERS must be an exception class"
-                )
-        
+                raise ValueError("Key in EXCEPTION_HANDLERS must be an exception class")
+
         handler = import_string(handler_path)
         yield exc, handler
 
@@ -105,7 +103,7 @@ def get_application(**configs) -> fastapi.FastAPI:
         if dep in dependencies:
             continue
         dependencies.append(dep)
-    
+
     configs["dependencies"] = dependencies
     app = fastapi.FastAPI(**configs)
     return setup_application(app)

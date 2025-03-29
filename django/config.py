@@ -5,7 +5,7 @@ from typing import Any, Dict, Union
 from types import MappingProxyType
 from django.conf import settings as django_settings
 
-from helpers.generics.utils.misc import merge_dicts
+from helpers.generics.utils.misc import merge_mappings
 
 
 def _make_proxy_getter(module, settings: Any):
@@ -121,7 +121,7 @@ class _Settings(ValueStoreProxy):
         return instance
 
     def __init__(self, setting_name: str) -> None:
-        settings: Dict[str, Any] = merge_dicts(
+        settings: Dict[str, Any] = merge_mappings(
             DEFAULT_SETTINGS, getattr(django_settings, setting_name, {})
         )
         return super().__init__(settings, recursive=True)

@@ -3,7 +3,7 @@ import datetime
 try:
     import zoneinfo
 except ImportError:
-    from backports import zoneinfo
+    from backports import zoneinfo # type: ignore
 
 from ..config import settings
 

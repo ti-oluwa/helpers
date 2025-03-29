@@ -28,37 +28,39 @@ class AbstractBaseUser(models.Model):
 
 
 class AbstractUserMeta(models.ModelBaseMeta):
-    def __new__(meta_cls, *args, **kwargs):
-        new_cls = super().__new__(meta_cls, *args, **kwargs)
-        meta_cls.check_username_field(new_cls)
-        meta_cls.check_required_fields(new_cls)
+    def __new__(cls, *args, **kwargs):
+        new_cls = super().__new__(cls, *args, **kwargs)
+        cls.check_username_field(new_cls)
+        cls.check_required_fields(new_cls)
         return new_cls
 
     @staticmethod
-    def check_username_field(cls):
-        field = cls.get_fields().get(cls.USERNAME_FIELD, None)
+    def check_username_field(new_cls):
+        field = new_cls.get_fields().get(new_cls.USERNAME_FIELD, None)
         if not field:
             raise ValueError(
-                f"USERNAME_FIELD '{cls.USERNAME_FIELD}' not found in model {cls.__name__}"
+                f"USERNAME_FIELD '{new_cls.USERNAME_FIELD}' not found in model {new_cls.__name__}"
             )
         if field.column.nullable:
             raise ValueError(
-                f"USERNAME_FIELD '{cls.USERNAME_FIELD}' must not be nullable"
+                f"USERNAME_FIELD '{new_cls.USERNAME_FIELD}' must not be nullable"
             )
         if not field.column.unique:
-            raise ValueError(f"USERNAME_FIELD '{cls.USERNAME_FIELD}' must be unique")
+            raise ValueError(
+                f"USERNAME_FIELD '{new_cls.USERNAME_FIELD}' must be unique"
+            )
         return None
 
     @staticmethod
-    def check_required_fields(cls):
-        for field in cls.REQUIRED_FIELDS:
-            if field not in cls.get_fields():
+    def check_required_fields(new_cls):
+        for field in new_cls.REQUIRED_FIELDS:
+            if field not in new_cls.get_fields():
                 raise ValueError(
-                    f"REQUIRED_FIELDS '{field}' not found in model {cls.__name__}"
+                    f"REQUIRED_FIELDS '{field}' not found in model {new_cls.__name__}"
                 )
 
-        if isinstance(cls.REQUIRED_FIELDS, collections.abc.Mapping):
-            for field_name, value in cls.REQUIRED_FIELDS.items():
+        if isinstance(new_cls.REQUIRED_FIELDS, collections.abc.Mapping):
+            for field_name, value in new_cls.REQUIRED_FIELDS.items():
                 if not is_iterable(value):
                     raise ValueError(
                         f"REQUIRED_FIELDS mapping value for '{field_name}' must be an iterable"
@@ -115,8 +117,10 @@ class AbstractUser(AbstractBaseUser, metaclass=AbstractUserMeta):
         doc="Date the user was last updated",
     )
 
-    USERNAME_FIELD = "username"
-    REQUIRED_FIELDS = {}
+    USERNAME_FIELD: str = "username"
+    REQUIRED_FIELDS: typing.Union[
+        typing.Mapping[str, typing.List[typing.Callable]], typing.Iterable[str]
+    ] = {}
 
     def get_username(self):
         """Return the username for the user."""
@@ -128,7 +132,7 @@ class AbstractUser(AbstractBaseUser, metaclass=AbstractUserMeta):
         # This is done to ensure that the username field is always the first field
         # in the required fields dictionary
         if isinstance(cls.REQUIRED_FIELDS, collections.abc.Mapping):
-            required_fields[cls.USERNAME_FIELD] = cls.REQUIRED_FIELDS.pop(
+            required_fields[cls.USERNAME_FIELD] = cls.REQUIRED_FIELDS.get(
                 cls.USERNAME_FIELD, []
             )
             required_fields.update(cls.REQUIRED_FIELDS)

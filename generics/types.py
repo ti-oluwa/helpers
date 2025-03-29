@@ -3,11 +3,8 @@ from types import MappingProxyType
 import copy
 import collections.abc
 
-
 from .typing import SupportsKeysAndGetItem
 
-
-_T = typing.TypeVar("_T")
 
 
 class MappingProxy(collections.abc.Mapping):
@@ -39,7 +36,9 @@ class MappingProxy(collections.abc.Mapping):
         mapping: SupportsKeysAndGetItem,
         *,
         recursive: bool = False,
-        copier: typing.Optional[typing.Callable[[_T], _T]] = copy.deepcopy,
+        copier: typing.Optional[
+            typing.Callable[[SupportsKeysAndGetItem], SupportsKeysAndGetItem]
+        ] = copy.deepcopy,
     ) -> None:
         """
         Initialize the mapping proxy.
@@ -53,12 +52,14 @@ class MappingProxy(collections.abc.Mapping):
             the proxy since a reference is stored instead of a new copy.
         """
         if callable(copier):
-            mapping = copier(mapping)
+            mapping_ = copier(mapping)
+        else:
+            mapping_ = mapping
 
         if recursive:
-            self.__dict__["_wrapped"] = self._wrap_mapping_recursively(mapping)
+            self.__dict__["_wrapped"] = self._wrap_mapping_recursively(mapping_)
         else:
-            self.__dict__["_wrapped"] = self._wrap_mapping(mapping)
+            self.__dict__["_wrapped"] = self._wrap_mapping(mapping_)
         return
 
     @classmethod

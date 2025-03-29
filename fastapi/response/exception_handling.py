@@ -19,7 +19,7 @@ async def validation_exception_handler(
     connection: HTTPConnection, exc: ValidationException
 ) -> Response:
     """Prepares and returns a properly formatted response for a `fastapi.ValidationException`."""
-    return shortcuts.validation_error(errors=exc.errors())
+    return shortcuts.validation_error(errors=list(exc.errors()))
 
 
 async def http_exception_handler(connection: HTTPConnection, exc: HTTPException) -> Response:

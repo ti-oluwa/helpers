@@ -5,7 +5,7 @@ import re
 try:
     import zoneinfo
 except ImportError:
-    from backports import zoneinfo
+    from backports import zoneinfo  # type: ignore
 
 from helpers.dependencies import deps_required, DependencyRequired
 from helpers import PYTHON_VERSION
@@ -83,7 +83,7 @@ _RFC3339_DATE_FORMAT_0 = "%Y, /-%m-%dT%H:%M:%S.%f%z"
 _RFC3339_DATE_FORMAT_1 = "%Y, /-%m-%dT%H:%M:%S%z"
 
 
-def rfc3339_parse(s: str, /) -> datetime:
+def rfc3339_parse(s: str, /) -> datetime.datetime:
     """
     Parse RFC 3339 datetime string.
 
@@ -150,8 +150,28 @@ def iso_parse(
                 continue
 
     if _has_dateutil:
-        return parser.parse(s)
+        return parser.parse(s)  # type: ignore
     raise ValueError(f"Could not parse datetime string {s}")
+
+
+@typing.overload
+def split(
+    start: datetime.date,
+    end: datetime.date,
+    part_factor: datetime.timedelta,
+    parts: int,
+) -> typing.Generator[typing.Tuple[datetime.date, datetime.date], None, None]: ...
+
+
+@typing.overload
+def split(  # type: ignore
+    start: datetime.datetime,
+    end: datetime.datetime,
+    part_factor: datetime.timedelta,
+    parts: int,
+) -> typing.Generator[
+    typing.Tuple[datetime.datetime, datetime.datetime], None, None
+]: ...
 
 
 def split(
@@ -210,7 +230,7 @@ def split(
         raise ValueError("parts must be a positive integer.")
 
     # Get the range/time difference between the start and end dates/datetimes
-    date_range = end - start
+    date_range = end - start # type: ignore
     # Calculate the number of possible parts based on the part factor
     possible_parts = date_range // part_factor
     if possible_parts < 1:
@@ -268,7 +288,7 @@ def split(
         # Calculate the upper boundary of the current part
         upper_boundary = lower_boundary + part_factor
 
-        remainder = end - upper_boundary
+        remainder = end - upper_boundary # type: ignore
         # If the difference between the end date/datetime and the upper boundary is less than the part factor
         if remainder < part_factor:
             remainder_is_a_multiple_of_base_part_factor = (

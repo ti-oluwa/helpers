@@ -10,7 +10,7 @@ import copy
 import inspect
 import pydantic
 import typing
-from typing_extensions import Self
+from typing_extensions import Self, ParamSpec
 
 from fastapi.exceptions import RequestValidationError, ValidationException
 from starlette.requests import HTTPConnection
@@ -18,6 +18,11 @@ from starlette.responses import Response
 from helpers.fastapi.utils.sync import sync_to_async
 from helpers.generics.exceptions.capture import ExceptionCaptor as BaseExceptionCaptor
 from helpers.generics.utils.decorators import classorinstancemethod
+from helpers.generics.typing import Function
+
+
+P = ParamSpec("P")
+R = typing.TypeVar("R")
 
 
 class ExceptionCaptor(BaseExceptionCaptor[BaseException, Response]):
@@ -35,22 +40,26 @@ class ExceptionCaptor(BaseExceptionCaptor[BaseException, Response]):
     # to use the FastAPI friendly `sync_to_async` utility
     # instead of that of asgiref
     @classmethod
-    async def run_async(cls, func, *args, **kwargs):
-        return await sync_to_async(func)(*args, **kwargs)
+    async def run_async(
+        cls, sync_func: Function[P, R], *args: P.args, **kwargs: P.kwargs
+    ):
+        return await sync_to_async(sync_func)(*args, **kwargs)
 
     @typing.overload
     async def as_dependency(
-        cls_or_self: typing.Type[Self],
-    ) -> typing.AsyncGenerator[Self, None]: ...
+        self: typing.Type[Self],
+    ) -> typing.AsyncIterator[Self]:
+        yield self()
 
     @typing.overload
     async def as_dependency(
-        cls_or_self: Self,
-    ) -> typing.AsyncGenerator[Self, None]: ...
+        self: Self,
+    ) -> typing.AsyncIterator[Self]:
+        yield self
 
     async def as_dependency(
-        cls_or_self: typing.Union[Self, typing.Type[Self]],
-    ) -> typing.AsyncGenerator[Self, None]:
+        self,
+    ) -> typing.AsyncIterator[Self]:
         """
         Dependency factory for FastAPI.
 
@@ -82,15 +91,15 @@ class ExceptionCaptor(BaseExceptionCaptor[BaseException, Response]):
             raise ValueError("This is a test error")
         ```
         """
-        if inspect.isclass(cls_or_self):
-            captor = cls_or_self()
+        if inspect.isclass(self):
+            captor = self()
         else:
-            captor = copy.copy(cls_or_self)
+            captor = copy.copy(self)
 
         async with captor:
             yield captor
 
-    as_dependency = classorinstancemethod(as_dependency)
+    as_dependency = classorinstancemethod(as_dependency)  # type: ignore
 
 
 # Export Aliases

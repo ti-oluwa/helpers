@@ -168,7 +168,7 @@ def add_parameter_to_signature(
 
     params.insert(index, parameter)
     new_sig = sig.replace(parameters=params)
-    func.__signature__ = new_sig
+    func.__signature__ = new_sig # type: ignore
     return func
 
 

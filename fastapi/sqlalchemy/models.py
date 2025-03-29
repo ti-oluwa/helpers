@@ -65,7 +65,7 @@ def _auto_tablename(model: typing.Type[_Model]) -> typing.Type[_Model]:
     if sa.inspect(model, raiseerr=False) is not None:
         return model
 
-    @orm.declared_attr
+    @orm.declared_attr # type: ignore
     def _tablename(model: typing.Type[_Model]) -> str:
         app_name = get_app_name(model)
         model_name = inflection.tableize(model.__name__)
@@ -81,8 +81,8 @@ def _auto_tablename(model: typing.Type[_Model]) -> typing.Type[_Model]:
 class ModelBaseMeta(orm.DeclarativeMeta):
     """Metaclass for SQLAlchemy ModelBase"""
 
-    def __new__(meta_cls, *args, **kwargs) -> typing.Type[_Model]:
-        new_cls = super().__new__(meta_cls, *args, **kwargs)
+    def __new__(cls, *args, **kwargs) -> typing.Type[ModelBase]:
+        new_cls = super().__new__(cls, *args, **kwargs)
         auto_tablename = bool(getattr(new_cls, "__auto_tablename__", None))
         tablename = getattr(new_cls, "__tablename__", None)
 
@@ -96,11 +96,11 @@ class ModelBaseMeta(orm.DeclarativeMeta):
             return _auto_tablename(new_cls)
         return new_cls
 
-    def __iter__(meta_cls):
-        if hasattr(meta_cls, "__mapper__"):
-            values = meta_cls.__mapper__.columns
+    def __iter__(cls):
+        if hasattr(cls, "__mapper__"):
+            values = cls.__mapper__.columns # type: ignore
         else:
-            values = vars(meta_cls)
+            values = vars(cls)
 
         for key, value in values.items():
             if isinstance(value, sa.Column):

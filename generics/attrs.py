@@ -134,7 +134,7 @@ def structure_to_generic_type(
             return origin(_iter)
 
     try:
-        return origin(value)
+        return origin(value)  # type: ignore
     except (TypeError, ValueError, cattrs.errors.StructureHandlerNotFoundError):
         try:
             return converter.structure(value, type(value))
@@ -209,7 +209,7 @@ def structure_with_casting_factory(
                         attr.alias or attr.name  # Use alias if provided
                     ),
                 )
-                for attr in cls.__attrs_attrs__
+                for attr in cls.__attrs_attrs__  # type: ignore
             }
         )
 
@@ -346,6 +346,19 @@ def unstructure_with_casting_factory(
     return _unstructure_with_casting
 
 
+@typing.overload
+def type_cast(
+    converter: cattrs.Converter,
+) -> typing.Callable[[typing.Type[_AI]], typing.Type[_AI]]: ...
+
+
+@typing.overload
+def type_cast(
+    converter: cattrs.Converter,
+    cls: typing.Type[_AI],
+) -> typing.Type[_AI]: ...
+
+
 def type_cast(
     converter: cattrs.Converter,
     cls: typing.Optional[typing.Type[_AI]] = None,
@@ -368,7 +381,7 @@ def type_cast(
     ```python
     import cattrs
     import attrs
-    
+
     converter = cattrs.Converter()
 
     @type_cast(converter)
@@ -379,7 +392,7 @@ def type_cast(
     ```
     """
     if cls is None:
-        return lambda cls: type_cast(converter, cls)
+        return lambda cls: type_cast(converter, cls)  # type: ignore
 
     # Ensures that the class is an attrs-based class
     if not attrs.has(cls):
@@ -393,4 +406,4 @@ def type_cast(
         cls, unstructure_with_casting_factory(converter)
     )
 
-    return cls
+    return cls  # type: ignore

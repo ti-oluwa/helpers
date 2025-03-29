@@ -1,12 +1,14 @@
-from typing import Awaitable, Dict, Any, Callable, Union
-import json
+import typing
 import copy
-import fastapi
+import orjson
+from starlette.responses import Response, StreamingResponse
 
 from . import _Response
 from .shortcuts import Status as ResponseStatus, Schema as ResponseSchema
 
-Formatter = Callable[[_Response], Union[_Response, Awaitable[_Response]]]
+Formatter = typing.Callable[
+    [Response], typing.Union[Response, typing.Awaitable[Response]]
+]
 
 
 DEFAULT_ERROR_MSG = "An error occurred while processing your request!"
@@ -16,7 +18,7 @@ DEFAULT_OK_MSG = "Request processed successfully!"
 DEFAULT_NOT_FOUND_MSG = "Resource not found!"
 
 
-def is_error_list(errors: Any) -> bool:
+def is_error_list(errors: typing.Any) -> typing.TypeGuard[typing.List[str]]:
     if not isinstance(errors, (list, tuple)):
         return False
     for error in errors:
@@ -26,7 +28,7 @@ def is_error_list(errors: Any) -> bool:
     return True
 
 
-def is_error_dict(errors: Any) -> bool:
+def is_error_dict(errors: typing.Any) -> typing.TypeGuard[typing.Dict[str, typing.Any]]:
     if not isinstance(errors, dict):
         return False
     for value in errors.values():
@@ -36,7 +38,9 @@ def is_error_dict(errors: Any) -> bool:
     return True
 
 
-def is_error_dict_list(errors: Any) -> bool:
+def is_error_dict_list(
+    errors: typing.Any,
+) -> typing.TypeGuard[typing.List[typing.Dict[str, typing.Any]]]:
     if not isinstance(errors, (list, tuple)):
         return False
     for error in errors:
@@ -63,7 +67,7 @@ STANDARD_RESPONSE_DATA_KEYS = {
 """For generic response data formatting, these keys are all the keys that can be present in the formatted response."""
 
 
-def is_formatted(data: Dict[str, Any]) -> bool:
+def is_formatted(data: typing.Dict[str, typing.Any]) -> bool:
     """Checks if the response data has already been formatted by the generic formatter."""
     keys_found = set(data.keys())
     non_standard_keys_found = set(keys_found).difference(STANDARD_RESPONSE_DATA_KEYS)
@@ -72,7 +76,7 @@ def is_formatted(data: Dict[str, Any]) -> bool:
     if not set(keys_found).issuperset(COMPULSORY_RESPONSE_DATA_KEYS):
         return False
 
-    # if any non-standard keys are found, they must be subset of optional keys
+    # if typing.any non-standard keys are found, they must be subset of optional keys
     # else, the data is not formatted
     if non_standard_keys_found and not non_standard_keys_found.issubset(
         OPTIONAL_RESPONSE_DATA_KEYS
@@ -115,8 +119,8 @@ def is_formatted(data: Dict[str, Any]) -> bool:
 
 
 def generic_response_data_formatter(
-    response_data: Any, response_ok: bool
-) -> Dict[str, Any]:
+    response_data: typing.Any, response_ok: bool
+) -> typing.Dict[str, typing.Any]:
     """
     Generic response data formatter
 
@@ -144,7 +148,7 @@ def generic_response_data_formatter(
         if response_ok:
             formatted.data = response_data
         else:
-            if is_formatted(response_data, str):
+            if is_formatted(response_data):
                 formatted.detail = response_data
             else:
                 formatted.errors = response_data
@@ -209,6 +213,13 @@ def generic_response_data_formatter(
     return formatted.model_dump(mode="json")
 
 
+def is_streaming_response(response: Response) -> bool:
+    """
+    Checks if the response is a streaming response.
+    """
+    return isinstance(response, StreamingResponse)
+
+
 async def json_httpresponse_formatter(response: _Response) -> _Response:
     """
     Formats JSON serializable response data into a structured format.
@@ -219,19 +230,10 @@ async def json_httpresponse_formatter(response: _Response) -> _Response:
     """
     response_type = type(response)
     status_code = response.status_code
-    if status_code == 204:
-        # No content response
+    if status_code in {204, 304} or is_streaming_response(response):
         return response
 
-    if issubclass(response_type, fastapi.responses.StreamingResponse):
-        chunks = []
-        async for chunk in response.body_iterator:
-            chunks.append(chunk)
-        response_body = b"".join(chunks)
-    else:
-        response_body = response.body
-
-    data = json.loads(response_body) if response_body else ""
+    data = orjson.loads(response.body) if response.body else ""
     response_ok = status_code >= 200 and status_code < 300
     formatted_data = generic_response_data_formatter(data, response_ok)
 
@@ -239,7 +241,10 @@ async def json_httpresponse_formatter(response: _Response) -> _Response:
     if status_code == 404 and formatted_data["message"] == DEFAULT_ERROR_MSG:
         formatted_data["message"] = DEFAULT_NOT_FOUND_MSG
 
-    content = json.dumps(formatted_data)
+    content = orjson.dumps(
+        formatted_data,
+        option=orjson.OPT_NON_STR_KEYS | orjson.OPT_SERIALIZE_NUMPY,
+    )
     headers = copy.copy(response.headers)
     headers["Content-Length"] = str(len(content))
     formatted_response = response_type(

@@ -3,10 +3,10 @@ import re
 
 _T = typing.TypeVar("_T")
 
-NONE = object()
+NOT_SET = object()
 
 
-def min_length_validator(min_length: int, value: _T = NONE) -> _T:
+def min_length_validator(min_length: int, value: _T = NOT_SET) -> _T:
     """
     Validates the minimum length of a string
 
@@ -15,15 +15,15 @@ def min_length_validator(min_length: int, value: _T = NONE) -> _T:
     :return: The value if it is valid
     :raises ValueError: If the value is not valid
     """
-    if value is NONE:
-        return lambda v: min_length_validator(min_length, v)
+    if value is NOT_SET:
+        return lambda v: min_length_validator(min_length, v) # type: ignore
 
-    if len(value) < min_length:
+    if len(value) < min_length: # type: ignore
         raise ValueError(f"Value must be at least {min_length} characters long")
     return value
 
 
-def max_length_validator(max_length: int, value: _T = NONE) -> _T:
+def max_length_validator(max_length: int, value: _T = NOT_SET) -> _T:
     """
     Validates the maximum length of a string
 
@@ -32,10 +32,10 @@ def max_length_validator(max_length: int, value: _T = NONE) -> _T:
     :return: The value if it is valid
     :raises ValueError: If the value is not valid
     """
-    if value is NONE:
-        return lambda v: max_length_validator(max_length, v)
+    if value is NOT_SET:
+        return lambda v: max_length_validator(max_length, v) # type: ignore
 
-    if len(value) > max_length:
+    if len(value) > max_length: # type: ignore
         raise ValueError(f"Value must be at most {max_length} characters long")
     return value
 

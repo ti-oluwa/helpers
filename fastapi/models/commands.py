@@ -22,7 +22,9 @@ def validate_value(value: str, validators: typing.List[typing.Callable]) -> str:
         raise click.BadParameter("\n".join(exc.errors()))
 
 
-def is_unique(session: Session, model: Model, field_name: str, value: str) -> bool:
+def is_unique(
+    session: Session, model: typing.Type[Model], field_name: str, value: str
+) -> bool:
     """Check if the field value is unique."""
     result = session.execute(
         sa.select(sa.func.count()).where(getattr(model, field_name) == value)
@@ -30,9 +32,9 @@ def is_unique(session: Session, model: Model, field_name: str, value: str) -> bo
     return not result.scalar()
 
 
-def is_unique_field(field_name: str, model: Model) -> bool:
+def is_unique_field(field_name: str, model: typing.Type[Model]) -> bool:
     """Check if the field is unique."""
-    column = model.__table__.columns[field_name]
+    column = model.__table__.columns[field_name]  # type: ignore
     return getattr(column, "unique", False)
 
 

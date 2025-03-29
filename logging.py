@@ -1,5 +1,6 @@
 import logging as py_logging
 import os
+import typing
 import sys
 import traceback
 from typing import TextIO, Optional
@@ -47,7 +48,11 @@ def modify_log_level(logger_name: str, level: int | str) -> None:
     logger.setLevel(level)
 
 
-def log_message(message: str, level: int | str = py_logging.INFO) -> None:
+def log_message(
+    message: str,
+    level: int | str = py_logging.INFO,
+    logger: typing.Optional[py_logging.Logger] = None,
+) -> None:
     """
     Log a message with the specified log level.
 
@@ -57,11 +62,11 @@ def log_message(message: str, level: int | str = py_logging.INFO) -> None:
     if not isinstance(level, int):
         level = getattr(py_logging, level.upper(), py_logging.INFO)
 
-    logger = py_logging.getLogger(__name__)
-    logger.log(level, message)
+    logger = logger or py_logging.getLogger(__name__)
+    logger.log(int(level), message)
 
 
-def get_module_name(exc: Exception) -> str:
+def get_module_name(exc: BaseException) -> str:
     """
     Get the name of the module in which an exception occurred.
 
@@ -71,7 +76,7 @@ def get_module_name(exc: Exception) -> str:
     return traceback.extract_tb(exc.__traceback__)[-1].filename
 
 
-def get_function_name(exc: Exception) -> str:
+def get_function_name(exc: BaseException) -> str:
     """
     Get the name of the function in which an exception occurred.
 
@@ -81,14 +86,19 @@ def get_function_name(exc: Exception) -> str:
     return traceback.extract_tb(exc.__traceback__)[-1].name
 
 
-def log_exception(exc: Exception, custom_message: str = None) -> None:
+def log_exception(
+    exc: BaseException,
+    custom_message: typing.Optional[str] = None,
+    logger: typing.Optional[py_logging.Logger] = None,
+) -> None:
     """
     Log an exception with optional custom message and traceback.
 
     :param exc: Exception object.
     :param custom_message: Optional custom message to log.
+    :
     """
-    logger = py_logging.getLogger(__name__)
+    logger = logger or py_logging.getLogger(__name__)
 
     # Compose the log message
     if custom_message:

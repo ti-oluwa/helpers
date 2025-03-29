@@ -9,6 +9,7 @@ deps_required(
 import copy
 import typing
 import pydantic
+from pydantic_core import PydanticUndefined
 import functools
 import weakref
 
@@ -70,7 +71,7 @@ def _make_optional(
 
     if (
         isinstance(annotation, type)
-        and issubclass(annotation, pydantic.BaseModel)
+        and issubclass(annotation, pydantic.BaseModel)  # type: ignore[unreachable]
         and depth
     ):
         model_key = (annotation, depth, prefix)
@@ -81,12 +82,12 @@ def _make_optional(
             )(annotation)
         annotation = _model_cache[model_key]
 
-    tmp_field.annotation = typing.Optional[annotation]
+    tmp_field.annotation = typing.Optional[annotation]  # type: ignore[assignment]
     tmp_field.default = default
     return tmp_field.annotation, tmp_field
 
 
-def partial(
+def partial( # type: ignore[no-redef]
     model_cls: typing.Optional[typing.Type[Model]] = None,  # noqa :ARG006
     *,
     include: typing.Optional[typing.List[str]] = None,
@@ -159,22 +160,22 @@ def partial(
                 field_name: _make_optional(
                     field_info,
                     default=field_info.default
-                    if field_info.default is not pydantic.fields.PydanticUndefined
+                    if field_info.default is not PydanticUndefined
                     else None,
                     depth=depth,
                     prefix=prefix,
                 )
                 for field_name, field_info in fields
                 if exclude is None or field_name not in exclude
-            },
-        )
+            },  # type: ignore[no-any-return]
+        )  # type: ignore[no-any-return]
 
     if model_cls is None:
         return create_partial_model
-    return create_partial_model(model_cls)
+    return create_partial_model(model_cls)  # type: ignore[no-any-return]
 
 
-class _ModelConfig(typing.NamedTuple):
+class _ModelConfig(typing.Generic[Model], typing.NamedTuple):
     """Configuration for partial model creation."""
 
     model: typing.Type[Model]
@@ -194,7 +195,7 @@ def _create_model_config(*args: typing.Any) -> _ModelConfig:
     if len(args) > 3:
         raise TypeError(f"Expected at most 3 arguments, got {len(args)}")
 
-    model, *rest = args
+    model, *rest = args  # type: ignore[assignment]
     if not (isinstance(model, type) and issubclass(model, pydantic.BaseModel)):
         raise TypeError(f"Expected BaseModel subclass, got {type(model)}")
 

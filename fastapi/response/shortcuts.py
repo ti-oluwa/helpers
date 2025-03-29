@@ -3,6 +3,7 @@ from typing import Any, List, Dict, Optional, Union
 
 from pydantic_core._pydantic_core import PydanticSerializationError
 from starlette.responses import JSONResponse
+from fastapi.responses import ORJSONResponse
 from pydantic import BaseModel, Field
 
 from helpers.logging import log_exception
@@ -23,13 +24,13 @@ class Schema(BaseModel):
     )
     message: str = Field(..., description="A short message describing the response.")
     detail: Optional[str] = Field(
-        None, description="Optional detailed information about the response."
+        default=None, description="Optional detailed information about the response."
     )
     data: Optional[Any] = Field(
-        None, description="Optional data payload for the response."
+        default=None, description="Optional data payload for the response."
     )
     errors: Optional[Union[List[Any], Dict[str, Any]]] = Field(
-        None, description="Optional error details, if applicable."
+        default=None, description="Optional error details, if applicable."
     )
 
 
@@ -55,7 +56,7 @@ def json_response(
         content = schema.model_dump(mode="json")
     except PydanticSerializationError as exc:
         log_exception(exc)
-        return JSONResponse(
+        return ORJSONResponse(
             content={
                 "status": Status.ERROR.value,
                 "message": "Response serialization failed",
@@ -65,7 +66,7 @@ def json_response(
             status_code=500,
             **kwargs,
         )
-    return JSONResponse(
+    return ORJSONResponse(
         content=content,
         status_code=status_code,
         **kwargs,
@@ -112,28 +113,28 @@ def not_modified(message: str = "Not modified", **kwargs) -> JSONResponse:
 
 
 def created(
-    message: str = "Resource created", data: Union[Dict, List] = None, **kwargs
+    message: str = "Resource created", data: Optional[Any] = None, **kwargs
 ) -> JSONResponse:
     """Use when a resource is created."""
     return success(message, data=data, status_code=201, **kwargs)
 
 
 def accepted(
-    message: str = "Request accepted", data: Union[Dict, List] = None, **kwargs
+    message: str = "Request accepted", data: Optional[Any] = None, **kwargs
 ) -> JSONResponse:
     """Use when a request is accepted."""
     return success(message, data=data, status_code=202, **kwargs)
 
 
 def no_content(
-    message: str = "No content", data: Union[Dict, List] = None, **kwargs
+    message: str = "No content", data: Optional[Any] = None, **kwargs
 ) -> JSONResponse:
     """Use when there is no content to return."""
     return success(message, data=data, status_code=204, **kwargs)
 
 
 def partial_content(
-    message: str = "Partial content", data: Union[Dict, List] = None, **kwargs
+    message: str = "Partial content", data: Optional[Any] = None, **kwargs
 ) -> JSONResponse:
     """Use when there is partial content to return."""
     return success(message, data=data, status_code=206, **kwargs)
@@ -144,7 +145,7 @@ def already_exists(message: str = "Resource already exists", **kwargs) -> JSONRe
     return error(message, status_code=409, **kwargs)
 
 
-def validation_error(errors: Union[Dict, List] = None, **kwargs) -> JSONResponse:
+def validation_error(errors: Optional[Union[Dict, List]] = None, **kwargs) -> JSONResponse:
     """Use when a validation error occurs."""
     message = "Validation failed"
     return error(message, errors=errors, status_code=422, **kwargs)

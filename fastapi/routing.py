@@ -37,7 +37,7 @@ def install_router(router: fastapi.APIRouter, router_name: str, **kwargs) -> Non
     :param kwargs: additional router setup arguments
     """
 
-    def _router_setup(app: fastapi.FastAPI) -> None:
+    def _router_setup(app: fastapi.FastAPI) -> fastapi.FastAPI:
         app.include_router(router, **kwargs)
         return app
 

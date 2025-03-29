@@ -1,20 +1,28 @@
+from starlette.types import ASGIApp, Receive, Scope, Send
 from starlette.requests import HTTPConnection
 
 from helpers.fastapi.models.users import AbstractBaseUser, AnonymousUser
 
 
-async def ConnectedUserMiddleware(connection: HTTPConnection, call_next):
+class ConnectedUserMiddleware:
     """
     Middleware that adds the connected user to the connection state.
-
     `connection.state.user` will be an AbstractBaseUser instance.
 
-    :param connection: `starlette.requests.HTTPConnection` instance.
-    :param call_next: Next middleware in the chain
+    If no user is connected, `connection.state.user` will be an `AnonymousUser` instance.
     """
-    connected_user = getattr(connection.state, "user", None)
-    if not isinstance(connected_user, AbstractBaseUser):
-        connection.state.user = AnonymousUser()
-    
-    response = await call_next(connection)
-    return response
+
+    def __init__(self, app: ASGIApp):
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] not in ("http", "websocket"):
+            await self.app(scope, receive, send)
+            return
+
+        connection = HTTPConnection(scope, receive)
+        connected_user = getattr(connection.state, "user", None)
+        if not isinstance(connected_user, AbstractBaseUser):
+            connection.state.user = AnonymousUser()
+
+        await self.app(scope, receive, send)

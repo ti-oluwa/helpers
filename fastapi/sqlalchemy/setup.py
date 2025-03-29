@@ -27,8 +27,8 @@ def get_session(
     :param session_type: Type of session to return
     :param kwargs: Additional keyword arguments to pass to the session on creation
     """
-    session_type = session_type or SessionLocal
-    with session_type(**kwargs) as session:
+    session_type_ = session_type or SessionLocal
+    with session_type_(**kwargs) as session:
         yield session
 
 
@@ -38,7 +38,7 @@ def get_session(
 
 async_engine = create_async_engine(**sa_configs.async_engine)
 AsyncSessionLocal = sessionmaker(
-    bind=async_engine, class_=AsyncSession, **sa_configs.sessionmaker["async"]
+    bind=async_engine, class_=AsyncSession, **sa_configs.sessionmaker["async"] # type: ignore
 )
 
 
@@ -52,8 +52,8 @@ async def get_async_session(
     :param session_type: Type of session to return
     :param kwargs: Additional keyword arguments to pass to the session on creation
     """
-    session_type = session_type or AsyncSessionLocal
-    async with session_type(**kwargs) as session:
+    session_type_ = session_type or AsyncSessionLocal
+    async with session_type_(**kwargs) as session: # type: ignore
         yield session
 
 
