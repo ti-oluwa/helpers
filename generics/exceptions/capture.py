@@ -205,7 +205,7 @@ class ControllerContextDecorator(typing.Generic[ExceptionType, ResponseType]):
 
         return async_to_sync(async_func)(*args, **kwargs)
 
-    def __enter__(self):
+    def __enter__(self) -> typing.Any:
         raise NotImplementedError("Subclasses must implement this method")
 
     def __exit__(
@@ -213,7 +213,7 @@ class ControllerContextDecorator(typing.Generic[ExceptionType, ResponseType]):
     ) -> bool:
         raise NotImplementedError("Subclasses must implement this method")
 
-    async def __aenter__(self):
+    async def __aenter__(self) -> typing.Any:
         return await self.run_async(self.__enter__)
 
     async def __aexit__(

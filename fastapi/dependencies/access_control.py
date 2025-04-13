@@ -1,5 +1,5 @@
 """
-HTTP connection and connected user access control dependencies
+HTTP connection and user access control dependencies
 """
 
 import typing

@@ -1,7 +1,7 @@
 from enum import StrEnum
 from typing import Any, List, Dict, Optional, Union
 
-from pydantic_core._pydantic_core import PydanticSerializationError
+from pydantic_core._pydantic_core import PydanticSerializationError # type: ignore[import]
 from starlette.responses import JSONResponse
 from fastapi.responses import ORJSONResponse
 from pydantic import BaseModel, Field
@@ -14,6 +14,7 @@ class Status(StrEnum):
 
     SUCCESS = "success"
     ERROR = "error"
+    INFO = "info"
 
 
 class Schema(BaseModel):
@@ -88,6 +89,22 @@ def success(
         **kwargs,
     )
 
+ok = success
+
+def info(
+    message: str = "Information",
+    data: Optional[Any] = None,
+    status_code: int = 200,
+    **kwargs,
+) -> JSONResponse:
+    """Use for informational responses."""
+    return json_response(
+        message=message,
+        status=Status.INFO,
+        data=data,
+        status_code=status_code,
+        **kwargs,
+    )
 
 def error(
     message: str = "Oops! An error occurred",

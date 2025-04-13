@@ -1,10 +1,14 @@
 import fastapi
 import pydantic
 import typing
+import datetime
 import sqlalchemy as sa
 from annotated_types import Ge, Le
 
 from helpers.fastapi.sqlalchemy.models import ModelBase
+from helpers.fastapi.utils import timezone
+
+T = typing.TypeVar("T")
 
 
 @typing.final
@@ -14,6 +18,11 @@ class QueryParamNotSet(pydantic.BaseModel):
     def __bool__(self) -> bool:
         return False
 
+    def __or__(self, other: T) -> T:
+        return other
+
+    __ror__ = __or__
+
     def __repr__(self) -> str:
         return "QueryParamNotSet"
 
@@ -22,6 +31,9 @@ class QueryParamNotSet(pydantic.BaseModel):
 
     def __copy__(self):
         return self
+    
+    def __iter__(self): # type: ignore
+        return iter([])
 
     def __deepcopy__(
         self, memo: typing.Optional[typing.Dict[int, typing.Any]] = None
@@ -49,6 +61,7 @@ Limit: typing.TypeAlias = typing.Annotated[
     Ge(1),
     fastapi.Query(
         description="Maximum number of objects to return",
+        example=100,
     ),
 ]
 """Annotated dependency for a limit query parameter with a value between 1 and 1000"""
@@ -56,7 +69,10 @@ Limit: typing.TypeAlias = typing.Annotated[
 Offset: typing.TypeAlias = typing.Annotated[
     int,
     Ge(0),
-    fastapi.Query(description="Number of objects to skip"),
+    fastapi.Query(
+        description="Number of objects to skip",
+        example=0,
+    ),
 ]
 """Annotated dependency for an offset query parameter with a value of at least 0"""
 
@@ -79,11 +95,57 @@ def ordering_query_parser_factory(
     typing.Awaitable[typing.Union[OrderingExpressions[_T], QueryParamNotSet]],
 ]:
     """
-    Dependency factory to create an ordering query parameter parser
+    Dependency factory.
+
+    Builds an ordering query parameter parser.
 
     :param ordered: The SQLAlchemy model class to order on.
-    :param allowed_columns: Allowed columns for ordering on the endpoints model
+    :param allowed_columns: Allowed columns for ordering on the entity/model.
+        If None, all columns of the model are allowed.
+        If an empty set, no columns are allowed.
     :return: Dependency function to parse ordering query parameter
+
+    Example Usage:
+
+    ```python
+    # query.py
+    from .models import Item
+    from helpers.fastapi.requests.query import ordering_query_parser_factory, OrderingExpressions
+
+    # Build a query parser for fields on Item
+    # This will allow ordering on the 'name' and 'created_at' columns
+    # and will raise an error if any other column is used
+    # in the query parameter.
+    item_ordering_query_parser = ordering_query_parser_factory(
+        Item,
+        allowed_columns={"name", "created_at"},
+    )
+
+    # Define a type alias for the ordering query parameter
+    ItemOrdering: typing.TypeAlias = typing.Annotated[
+        typing.Union[OrderingExpressions[Item], QueryParamNotSet],
+        fastapi.Depends(item_ordering_query_parser),
+    ]
+
+    # endpoints.py
+    from .query import ItemOrdering
+    from helpers.fastapi.requests.query import Limit, Offset, ParamNotSet
+
+    @router.get(
+        "/items/",
+        response_model=typing.List[Item],
+    )
+    async def list_items(
+        session: DBSession,
+        limit: Limit = 100,
+        offset: Offset = 0,
+        ordering: ItemOrdering = ParamNotSet,
+    ):
+        query = session.query(Item)
+        if isinstance(ordering, list):
+            query = query.order_by(*ordering)
+        return await query.offset(offset).limit(limit).all()
+    ```
     """
     if allowed_columns is not None and not allowed_columns:
         raise ValueError("allowed_columns must not be an empty set")
@@ -102,7 +164,9 @@ def ordering_query_parser_factory(
         ordering: typing.Annotated[
             typing.Optional[str],
             fastapi.Query(
-                description=f"Ordering on '{ordered.__name__}'. Prefix with '-' for descending order.",
+                description=f"Order '{ordered.__name__}' objects by field names. Prefix with '-' for descending order. "
+                "Separate multiple columns with commas",
+                examples=list(allowed_columns),
             ),
         ] = None,
     ) -> typing.Union[OrderingExpressions[_T], QueryParamNotSet]:
@@ -136,6 +200,74 @@ def ordering_query_parser_factory(
 
         return result
 
+    return _query_parser
+
+
+def timestamp_query_parser(query_param: str):
+    """
+    Dependency factory.
+
+    Builds a dependency that parses a timestamp query parameter
+    into a (timezone-aware) datetime object
+
+    :param query_param: The name of the query parameter to parse
+    :return: A dependency function that parses the query parameter into a datetime object
+
+
+    Example Usage:
+    ```python
+    # query.py
+    from helpers.fastapi.requests.query import timestamp_query_parser
+    from helpers.fastapi.requests.query import QueryParamNotSet
+
+    # Define a type alias for the timestamp query parameter
+    TimestampGte: typing.TypeAlias = typing.Annotated[
+        typing.Union[datetime.datetime, QueryParamNotSet],
+        fastapi.Depends(timestamp_query_parser("timestamp_gte")),
+    ]
+
+    # endpoints.py
+    from .models import Item
+    from .query import TimestampGte
+    from helpers.fastapi.requests.query import Limit, Offset, ParamNotSet
+
+    @router.get(
+        "/items/",
+        response_model=typing.List[Item],
+    )
+    async def list_items(
+        session: DBSession,
+        limit: Limit = 100,
+        offset: Offset = 0,
+        timestamp_gte: TimestampGte = ParamNotSet,
+    ):
+        query = session.query(Item)
+        if isinstance(timestamp_gte, datetime.datetime):
+            query = query.filter(Item.timestamp >= timestamp_gte)
+        return await query.offset(offset).limit(limit).all()
+    ```
+    """
+
+    def _query_parser(
+        timestamp: typing.Annotated[
+            typing.Optional[str],
+            fastapi.Query(
+                description="String representing a datetime, preferably in ISO 8601 format",
+                example="2023-10-01T12:00:00Z",
+                alias=query_param,
+                alias_priority=1,
+            ),
+        ] = None,
+    ) -> typing.Union[datetime.datetime, QueryParamNotSet]:
+        if timestamp is None:
+            return ParamNotSet
+        return (
+            pydantic.TypeAdapter(pydantic.AwareDatetime)
+            .validate_python(timestamp, strict=False)
+            .astimezone(timezone.get_current_timezone())
+        )
+
+    _query_parser.__name__ = f"parse_{query_param}_query"
     return _query_parser
 
 
