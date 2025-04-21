@@ -1,3 +1,4 @@
+from calendar import c
 from helpers.dependencies import deps_required
 
 deps_required(
@@ -9,7 +10,7 @@ deps_required(
 import copy
 import typing
 import pydantic
-from pydantic_core import PydanticUndefined
+from pydantic_core import PydanticUndefined, PydanticCustomError
 import functools
 import weakref
 
@@ -87,7 +88,7 @@ def _make_optional(
     return tmp_field.annotation, tmp_field
 
 
-def partial( # type: ignore[no-redef]
+def partial(  # type: ignore[no-redef]
     model_cls: typing.Optional[typing.Type[Model]] = None,  # noqa :ARG006
     *,
     include: typing.Optional[typing.List[str]] = None,
@@ -279,3 +280,30 @@ class Partial(typing.Generic[Model]):
         :raises TypeError: Subclassing not allowed.
         """
         raise TypeError("Cannot subclass {}.Partial".format(cls.__module__))
+
+
+def parse_bool_like(v: typing.Any) -> bool:
+    if isinstance(v, bool):
+        return v
+    if isinstance(v, str):
+        v = v.strip().lower()
+        if v in {"true", "1", "yes", "y"}:
+            return True
+        elif v in {"false", "0", "no", "n"}:
+            return False
+    if isinstance(v, int):
+        return bool(v)
+    raise PydanticCustomError(
+        "bool_like",
+        "Invalid value for boolean-like field: {value!r}. Expected 'true', 'false', '1', '0', 'yes', 'no', 'y', 'n' or an integer",
+        {"value": v, "type": type(v).__name__},  # type: ignore[arg-type] # noqa: F821
+    )
+
+
+BoolLike = typing.Annotated[
+    bool,
+    pydantic.PlainValidator(
+        parse_bool_like,
+        json_schema_input_type=typing.Union[str, int, bool],
+    ),
+]

@@ -1,7 +1,7 @@
 import typing
 import fastapi
 
-from .middlewares.core import apply_middleware
+from .middleware.core import apply_middleware
 from .dependencies import Dependency
 from .config import settings
 from helpers.generics.utils.module_loading import import_string

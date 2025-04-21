@@ -1,27 +1,31 @@
 import typing
 
+import pydantic
 from starlette.requests import Request
 
-_T = typing.TypeVar("_T")
+from helpers.fastapi.response import DataSchema
+
+T = typing.TypeVar("T")
 
 
-class _PaginatedData(typing.Generic[_T], typing.TypedDict):
-    count: int
+@typing.final
+class PaginatedData(pydantic.BaseModel, typing.Generic[T]):
+    count: pydantic.PositiveInt
     limit: int
     offset: int
-    next: typing.Optional[str]
-    previous: typing.Optional[str]
-    data: typing.Sequence[_T]
+    next: typing.Optional[pydantic.StrictStr]
+    previous: typing.Optional[pydantic.StrictStr]
+    data: typing.Sequence[T]
 
 
 def paginated_data(
     request: Request,
-    data: typing.Sequence[_T],
+    data: typing.Sequence[T],
     limit: int,
     offset: int,
     total: typing.Optional[int] = None,
     query_params: typing.Optional[typing.Dict[str, typing.Any]] = None,
-) -> _PaginatedData[_T]:
+) -> PaginatedData[T]:
     """
     Convert iterable data resulting from pagination
     to structured data with necessary pagination info.
@@ -69,7 +73,7 @@ def paginated_data(
             **request_query_params, offset=prev_offset
         )
 
-    return _PaginatedData(
+    return PaginatedData(
         count=len(data),
         limit=limit,
         offset=offset,
@@ -77,6 +81,9 @@ def paginated_data(
         previous=str(prev_url) if prev_url else None,
         data=data,
     )
+
+
+PaginatedResponse: typing.TypeAlias = DataSchema[PaginatedData[T]]
 
 
 __all__ = [

@@ -1,7 +1,9 @@
 from enum import StrEnum
-from typing import Any, List, Dict, Optional, Union
+import typing
+from types import NoneType
 
-from pydantic_core._pydantic_core import PydanticSerializationError # type: ignore[import]
+import pydantic
+from pydantic_core._pydantic_core import PydanticSerializationError  # type: ignore[import]
 from starlette.responses import JSONResponse
 from fastapi.responses import ORJSONResponse
 from pydantic import BaseModel, Field
@@ -17,21 +19,99 @@ class Status(StrEnum):
     INFO = "info"
 
 
-class Schema(BaseModel):
+T = typing.TypeVar(
+    "T",
+    dict,
+    typing.Sequence,
+    str,
+    int,
+    float,
+    bool,
+    BaseModel,
+    NoneType,
+    covariant=True,
+)
+E = typing.TypeVar("E", typing.Sequence, dict, NoneType, contravariant=True)
+
+
+@typing.final
+class Schema(BaseModel, typing.Generic[T, E]):
     """Response schema."""
 
     status: Status = Field(
         ..., description="The status of the response, e.g., 'success' or 'error'."
     )
     message: str = Field(..., description="A short message describing the response.")
-    detail: Optional[str] = Field(
-        default=None, description="Optional detailed information about the response."
+    detail: typing.Optional[str] = Field(
+        description="typing.Optional detailed information about the response."
     )
-    data: Optional[Any] = Field(
-        default=None, description="Optional data payload for the response."
+    data: typing.Optional[T] = Field(
+        description="typing.Optional data payload for the response."
     )
-    errors: Optional[Union[List[Any], Dict[str, Any]]] = Field(
-        default=None, description="Optional error details, if applicable."
+    errors: typing.Optional[E] = Field(
+        description="typing.Optional error details, if applicable."
+    )
+
+
+DataSchema: typing.TypeAlias = Schema[T, None]
+"""Schema alias for a response with data only. Typically used for successful responses."""
+
+ErrorSchema: typing.TypeAlias = Schema[None, E]
+"""Schema alias for a response with errors only. Typically used for error responses."""
+
+PydanticModel = typing.TypeVar(
+    "PydanticModel",
+    bound=pydantic.BaseModel,
+)
+
+
+def NewSchema(
+    name: str,
+    /,
+    fields: typing.Dict[
+        str, typing.Union[typing.Type[typing.Any], pydantic.fields.FieldInfo]
+    ],
+    base_model: typing.Type[PydanticModel] = pydantic.BaseModel,
+) -> typing.Type[pydantic.BaseModel]:
+    """
+    Schema factory function to create a new Pydantic model dynamically.
+
+    :param name: The name of the new model.
+    :param fields: A dictionary of field names and their types or FieldInfo.
+    :param base_model: The base model to inherit from. Defaults to pydantic.BaseModel.
+    :return: A new Pydantic model class.
+
+    Example:
+    ```python
+    from fastapi import FastAPI
+
+    from helpers.fastapi.response.shortcuts import NewSchema, DataSchema, success
+
+    app = FastAPI()
+
+    @app.post(
+        "/example",
+        response_model=DataSchema[
+            NewSchema("ExampleSchema", {"field1": str, "field2": int)
+        ],
+        description="Example endpoint",
+    )
+    async def example_endpoint():
+        return success(data={"field1": "value", "field2": 42})
+    ```
+
+    This function allows you to create a new Pydantic model dynamically with the specified fields.
+    The created model can be used as a response model in FastAPI endpoints.
+    The fields can be defined using standard Python types or Pydantic's FieldInfo for more complex validation.
+    """
+    return type(
+        name,
+        (base_model,),
+        {
+            "__module__": __name__,
+            "__doc__": f"{name} model",
+            "__annotations__": fields,
+        },
     )
 
 
@@ -39,14 +119,14 @@ def json_response(
     message: str = "Request successful!",
     *,
     status: Status = Status.SUCCESS,
-    detail: Optional[str] = None,
-    data: Optional[Any] = None,
-    errors: Optional[Union[List[Any], Dict[str, Any]]] = None,
+    detail: typing.Optional[str] = None,
+    data: typing.Optional[T] = None,
+    errors: typing.Optional[E] = None,
     status_code: int = 200,
     **kwargs,
 ) -> JSONResponse:
     """Returns a JSON response with a structured payload."""
-    schema = Schema(
+    schema = Schema[T, E](
         status=status,
         message=message,
         detail=detail,
@@ -76,7 +156,7 @@ def json_response(
 
 def success(
     message: str = "Request successful!",
-    data: Optional[Any] = None,
+    data: typing.Optional[T] = None,
     status_code: int = 200,
     **kwargs,
 ) -> JSONResponse:
@@ -89,11 +169,13 @@ def success(
         **kwargs,
     )
 
+
 ok = success
+
 
 def info(
     message: str = "Information",
-    data: Optional[Any] = None,
+    data: typing.Optional[T] = None,
     status_code: int = 200,
     **kwargs,
 ) -> JSONResponse:
@@ -106,10 +188,11 @@ def info(
         **kwargs,
     )
 
+
 def error(
     message: str = "Oops! An error occurred",
-    errors: Optional[Union[List[Any], Dict[str, Any]]] = None,
-    detail: Optional[str] = None,
+    errors: typing.Optional[E] = None,
+    detail: typing.Optional[str] = None,
     status_code: int = 500,
     **kwargs,
 ) -> JSONResponse:
@@ -130,28 +213,29 @@ def not_modified(message: str = "Not modified", **kwargs) -> JSONResponse:
 
 
 def created(
-    message: str = "Resource created", data: Optional[Any] = None, **kwargs
+    message: str = "Resource created", data: typing.Optional[T] = None, **kwargs
 ) -> JSONResponse:
     """Use when a resource is created."""
     return success(message, data=data, status_code=201, **kwargs)
 
 
 def accepted(
-    message: str = "Request accepted", data: Optional[Any] = None, **kwargs
+    message: str = "Request accepted", data: typing.Optional[T] = None, **kwargs
 ) -> JSONResponse:
     """Use when a request is accepted."""
     return success(message, data=data, status_code=202, **kwargs)
 
 
-def no_content(
-    message: str = "No content", data: Optional[Any] = None, **kwargs
-) -> JSONResponse:
+def no_content(message: str = "No content", **kwargs) -> JSONResponse:
     """Use when there is no content to return."""
-    return success(message, data=data, status_code=204, **kwargs)
+    kwargs.pop("data", None)
+    kwargs.pop("errors", None)
+    kwargs.pop("detail", None)
+    return success(message, status_code=204, **kwargs)
 
 
 def partial_content(
-    message: str = "Partial content", data: Optional[Any] = None, **kwargs
+    message: str = "Partial content", data: typing.Optional[T] = None, **kwargs
 ) -> JSONResponse:
     """Use when there is partial content to return."""
     return success(message, data=data, status_code=206, **kwargs)
@@ -162,7 +246,7 @@ def already_exists(message: str = "Resource already exists", **kwargs) -> JSONRe
     return error(message, status_code=409, **kwargs)
 
 
-def validation_error(errors: Optional[Union[Dict, List]] = None, **kwargs) -> JSONResponse:
+def validation_error(errors: typing.Optional[E] = None, **kwargs) -> JSONResponse:
     """Use when a validation error occurs."""
     message = "Validation failed"
     return error(message, errors=errors, status_code=422, **kwargs)
@@ -301,6 +385,11 @@ def unavailable_for_legal_reasons(
 
 
 __all__ = [
+    "Status",
+    "Schema",
+    "DataSchema",
+    "ErrorSchema",
+    "NewSchema",
     "json_response",
     "success",
     "error",
