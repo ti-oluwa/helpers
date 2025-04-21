@@ -3,6 +3,8 @@ import fastapi
 import pydantic
 import starlette.exceptions
 
+from helpers.generics.utils.aio import R
+
 
 INSTALLED_APPS: typing.Sequence[str] = []
 
@@ -19,12 +21,12 @@ AUTH_USER_MODEL: typing.Optional[str] = None
 MIDDLEWARE: typing.Sequence[
     typing.Union[str, typing.Tuple[str, typing.Dict[str, typing.Any]]]
 ] = [
-    "helpers.fastapi.middlewares.core.AllowedHostsMiddleware",
-    "helpers.fastapi.middlewares.core.AllowedIPsMiddleware",
-    "helpers.fastapi.middlewares.core.HostBlacklistMiddleware",
-    "helpers.fastapi.middlewares.core.IPBlacklistMiddleware",
-    "helpers.fastapi.middlewares.users.ConnectedUserMiddleware",
-    "helpers.fastapi.response.middlewares.FormatJSONResponseMiddleware",
+    "helpers.fastapi.middleware.core.AllowedHostsMiddleware",
+    "helpers.fastapi.middleware.core.AllowedIPsMiddleware",
+    "helpers.fastapi.middleware.core.HostBlacklistMiddleware",
+    "helpers.fastapi.middleware.core.IPBlacklistMiddleware",
+    "helpers.fastapi.middleware.users.ConnectedUserMiddleware",
+    "helpers.fastapi.response.middleware.FormatJSONResponseMiddleware",
 ]
 
 PASSWORD_SCHEMES: typing.Sequence[str] = ["md5_crypt"]
@@ -82,3 +84,7 @@ SENSITIVE_HEADERS: typing.Iterable[str] = {
     "x-api-token",
     "x-api-secret",
 }
+
+LOG_CONNECTION_EVENTS: bool = False  # Enable/disable request event logging
+
+REDIS_URL: str = "redis://localhost:6379/0"

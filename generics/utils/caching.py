@@ -51,7 +51,7 @@ class ThreadSafeTTLCache(TTLCache[_KT, _VT]):
         with self._lock:
             super().__setitem__(key, value)
 
-    def __delitem__(self, key):
+    def __delitem__(self, key: _KT):
         with self._lock:
             return super().__delitem__(key)
 
@@ -229,7 +229,7 @@ class ThreadSafeTLRUCache(TLRUCache[_KT, _VT]):
         with self._lock:
             super().__setitem__(key, value)
 
-    def __delitem__(self, key):
+    def __delitem__(self, key: _KT):
         with self._lock:
             return super().__delitem__(key)
 
@@ -406,7 +406,7 @@ class ThreadSafeLRUCache(LRUCache[_KT, _VT]):
         with self._lock:
             super().__setitem__(key, value)
 
-    def __delitem__(self, key):
+    def __delitem__(self, key: _KT):
         with self._lock:
             return super().__delitem__(key)
 
@@ -565,7 +565,7 @@ class ThreadSafeLFUCache(LFUCache[_KT, _VT]):
         with self._lock:
             super().__setitem__(key, value)
 
-    def __delitem__(self, key):
+    def __delitem__(self, key: _KT):
         with self._lock:
             return super().__delitem__(key)
 

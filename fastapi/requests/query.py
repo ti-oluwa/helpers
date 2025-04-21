@@ -189,8 +189,8 @@ def ordering_query_parser_factory(
 
             if check_columns and clean_column not in allowed_columns:
                 raise fastapi.HTTPException(
-                    status_code=400,
-                    detail=f"Invalid column name: {clean_column}. Allowed columns: {', '.join(allowed_columns)}",
+                    status_code=422,
+                    detail=f"Invalid column name: {clean_column!r}. Allowed columns: {', '.join(allowed_columns)}",
                 )
 
             # Use SQLAlchemy's column reference instead of raw string
