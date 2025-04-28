@@ -1,4 +1,5 @@
 import typing
+from dataclasses import dataclass
 from typing_extensions import ParamSpec
 
 
@@ -21,8 +22,15 @@ class SupportsLen(typing.Protocol):
     def __len__(self) -> int: ...
 
 
-_P = ParamSpec("_P")
-_R = typing.TypeVar("_R")
+P = ParamSpec("P")
+R = typing.TypeVar("R")
 
-Function = typing.Callable[_P, _R]
-CoroutineFunction = typing.Callable[_P, typing.Awaitable[_R]]
+Function = typing.Callable[P, R]
+CoroutineFunction = typing.Callable[P, typing.Awaitable[R]]
+
+
+@dataclass
+class _Dataclass:
+    pass
+
+DataclassType = type(_Dataclass)

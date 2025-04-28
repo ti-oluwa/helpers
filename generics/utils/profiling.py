@@ -19,8 +19,8 @@ class _timeit(ContextDecorator):
 
     def __init__(
         self,
-        identifier: typing.typing.Optional[str] = None,
-        output: typing.typing.Optional[typing.Callable] = None,
+        identifier: typing.Optional[str] = None,
+        output: typing.Optional[typing.Callable] = None,
         use_perf_counter: bool = True,
     ) -> None:
         """
@@ -106,7 +106,7 @@ def timeit( # type: ignore
             use_perf_counter=use_perf_counter,
         )
         if identifier:
-            return timer(identifier)
+            return timer(identifier) # type: ignore
         return timer
 
     timer = _timeit(
@@ -226,7 +226,7 @@ def profileit( # type: ignore
             builtins=builtins,
         )
         if identifier:
-            return profiler(identifier)
+            return profiler(identifier) # type: ignore
         return profiler
 
     profiler = _Profiler(

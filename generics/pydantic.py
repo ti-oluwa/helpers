@@ -295,7 +295,7 @@ def parse_bool_like(v: typing.Any) -> bool:
         return bool(v)
     raise PydanticCustomError(
         "bool_like",
-        "Invalid value for boolean-like field: {value!r}. Expected 'true', 'false', '1', '0', 'yes', 'no', 'y', 'n' or an integer",
+        "Invalid value for boolean-like field: '{value}'. Expected 'true', 'false', '1', '0', 'yes', 'no', 'y', 'n' or an integer",
         {"value": v, "type": type(v).__name__},  # type: ignore[arg-type] # noqa: F821
     )
 

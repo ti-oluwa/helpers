@@ -9,6 +9,7 @@ from fastapi.responses import ORJSONResponse
 from pydantic import BaseModel, Field
 
 from helpers.logging import log_exception
+from helpers.generics.typing import DataclassType
 
 
 class Status(StrEnum):
@@ -29,9 +30,16 @@ T = typing.TypeVar(
     bool,
     BaseModel,
     NoneType,
+    DataclassType,
     covariant=True,
 )
-E = typing.TypeVar("E", typing.Sequence, dict, NoneType, contravariant=True)
+E = typing.TypeVar(
+    "E",
+    typing.Sequence,
+    typing.Iterable,
+    dict,
+    NoneType,
+)
 
 
 @typing.final

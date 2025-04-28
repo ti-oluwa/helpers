@@ -7,47 +7,54 @@ from ..generics.utils.profiling import timeit
 from .mock_data import course_data, student_data, year_data
 
 
+_DataClass_co = typing.TypeVar("_DataClass_co", bound=dc.DataClass, covariant=True)
+
+
 ################
 # DATA CLASSES #
 ################
-class AcademicYear(dc.DataClass):
+class AcademicYear(dc.DataClass, slots=True):
     """Academic year data class"""
 
     id = dc.Field(int, required=True)
     name = dc.StringField(max_length=100)
     start_date = dc.DateField(input_formats=["%d-%m-%Y", "%d/%m/%Y"])
     end_date = dc.DateField(input_formats=["%d-%m-%Y", "%d/%m/%Y"])
-    created_at = dc.DateTimeField(default=datetime.now)
+    created_at = dc.DateTimeField(default=datetime.now, tz="Africa/Lagos")
 
 
-class Course(dc.DataClass):
+class Course(dc.DataClass, slots=True):
     """Course data class"""
 
-    id = dc.Field(int, required=True)  # Alternative: dc.IntegerField(...)
+    id = dc.Field(
+        int, required=True, allow_null=True
+    )  # Alternative: dc.IntegerField(...)
     name = dc.StringField(max_length=100)
     code = dc.StringField(max_length=20)
-    year = dc.Field(AcademicYear, lazy=True)  # Alternative: AcademicYear(...)
+    year = dc.NestedField(AcademicYear, lazy=False)
     created_at = dc.DateTimeField(default=datetime.now)
 
 
-class Student(dc.DataClass):
+class Student(dc.DataClass, slots=True):
     """Student data class with multiple fields and a list of enrolled courses"""
 
     id = dc.IntegerField(required=True)
     name = dc.StringField(max_length=100)
-    age = dc.IntegerField(min_value=18, max_value=100)
+    age = dc.IntegerField(min_value=30, max_value=100)
     email = dc.EmailField(allow_null=True, default=None)
     phone = dc.StringField(allow_null=True, default=None)
-    year = AcademicYear(lazy=True)
-    courses = dc.ListField(child=Course(lazy=True), lazy=True)
+    year = dc.NestedField(AcademicYear, lazy=False)
+    courses = dc.ListField(
+        child=dc.NestedField(Course, lazy=False),
+    )
     joined_at = dc.DateTimeField(allow_null=True, tz="Africa/Lagos")
     created_at = dc.DateTimeField(default=datetime.now, tz="Africa/Lagos")
 
 
 def load_data(
     data_list: typing.List[typing.Dict[str, typing.Any]],
-    datacls: typing.Type[dc._DataClass_co],
-) -> typing.List[dc._DataClass_co]:
+    datacls: typing.Type[_DataClass_co],
+) -> typing.List[_DataClass_co]:
     """
     Load data into data classes
 
@@ -55,6 +62,7 @@ def load_data(
     :param datacls: Data class to load data into
     :return: List of the data class instances
     """
+    # raise
     return [datacls(data) for data in data_list]
 
 
@@ -73,34 +81,30 @@ def example():
     courses = load_data(course_data, Course)
     students = load_data(student_data, Student)
 
-    # for student in students:
-    #     log(student.to_dict())
-    #     log("\n")
+    for student in students:
+        student.serialize(fmt="python", depth=1)
 
-    # for course in courses:
-    #     log(course.to_dict())
-    #     log("\n")
+    for course in courses:
+        course.serialize(fmt="python", depth=1)
 
-    # for year in years:
-    #     log(year.to_dict())
-    #     log("\n")
+    for year in years:
+        year.serialize(fmt="python", depth=1)
 
     # # Access and print a student's information
     # student = students[0]  # e.g., first student in the list
-    # log(student.to_dict())  # View student details in dictionary format
-
+    # log(student.serialize())  # View student details in dictionary format
     # # Modify the student's academic year
     # student.year = years[1]  # Update academic year to next year
-    # log(f"Updated Academic Year for {student.name}: ", student.to_dict())
+    # log(f"Updated Academic Year for {student.name}: ", student.serialize())
 
     # # Serialize the student's data to JSON format
-    # student_json = student.to_json()
+    # student_json = student.serialize(fmt="json")
     # log("Serialized Student JSON: ", student_json)
 
     # # Nesting and Data Validation Example
     # # Changing a course's academic year in a nested structure
     # courses[0].year = years[1]  # Update the academic year for a course
-    # log(f"Updated Course Year for {courses[0].name}: ", courses[0].to_dict())
+    # log(f"Updated Course Year for {courses[0].name}: ", courses[0].serialize())
 
     # # Update the `year` attribute directly with a new dictionary
     # student.year = {
@@ -109,7 +113,7 @@ def example():
     #     "start_date": "2022-09-01",
     #     "end_date": "2023-06-30",
     # }
-    # log(f"Updated Academic Year for {student.name}: ", student.to_dict())
+    # log(f"Updated Academic Year for {student.name}: ", student.serialize())
 
     # # Adding a new course to a student and displaying
     # new_course = Course(
@@ -118,7 +122,7 @@ def example():
     # student.courses.append(new_course)
     # log(
     #     f"Updated Courses for {student.name}: ",
-    #     [course.to_json() for course in student.courses],
+    #     [course.serialize(fmt="json") for course in student.courses],
     # )
 
     # # Update student age

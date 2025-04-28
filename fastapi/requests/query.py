@@ -1,4 +1,5 @@
 import fastapi
+from inflection import pluralize, humanize, underscore
 import pydantic
 import typing
 import datetime
@@ -31,8 +32,8 @@ class QueryParamNotSet(pydantic.BaseModel):
 
     def __copy__(self):
         return self
-    
-    def __iter__(self): # type: ignore
+
+    def __iter__(self):  # type: ignore
         return iter([])
 
     def __deepcopy__(
@@ -51,7 +52,7 @@ def clean_params(**params: typing.Any) -> typing.Dict[str, typing.Any]:
     return {
         key: value
         for key, value in params.items()
-        if isinstance(value, QueryParamNotSet) is False
+        if not isinstance(value, QueryParamNotSet)
     }
 
 
@@ -85,11 +86,14 @@ _T = typing.TypeVar(
 OrderingExpressions: typing.TypeAlias = typing.List[sa.UnaryExpression[_T]]
 """Type alias for a list of SQLAlchemy ordering expressions"""
 
+DEFAULT_QUERY_PARSER_DESCRIPTION = "Order '{name_plural}' by field names. Prefix with '-' for descending order. Separate multiple columns with commas"
+
 
 def ordering_query_parser_factory(
     ordered: typing.Type[_T],
     *,
     allowed_columns: typing.Optional[typing.Set[str]] = None,
+    description: typing.Optional[str] = None,
 ) -> typing.Callable[
     [str],
     typing.Awaitable[typing.Union[OrderingExpressions[_T], QueryParamNotSet]],
@@ -103,6 +107,8 @@ def ordering_query_parser_factory(
     :param allowed_columns: Allowed columns for ordering on the entity/model.
         If None, all columns of the model are allowed.
         If an empty set, no columns are allowed.
+    :param description: Description of the query parameter.
+        If None, a default description is used.
     :return: Dependency function to parse ordering query parameter
 
     Example Usage:
@@ -160,12 +166,14 @@ def ordering_query_parser_factory(
                     f"Column {column} not found in ordered model '{ordered.__name__}'"
                 )
 
-    async def _query_parser(
+    name_plural = pluralize(humanize(underscore(ordered.__name__)))
+    description = description or DEFAULT_QUERY_PARSER_DESCRIPTION
+
+    async def query_parser(
         ordering: typing.Annotated[
             typing.Optional[str],
             fastapi.Query(
-                description=f"Order '{ordered.__name__}' objects by field names. Prefix with '-' for descending order. "
-                "Separate multiple columns with commas",
+                description=description.format(name_plural=name_plural),
                 examples=list(allowed_columns),
             ),
         ] = None,
@@ -200,7 +208,7 @@ def ordering_query_parser_factory(
 
         return result
 
-    return _query_parser
+    return query_parser
 
 
 def timestamp_query_parser(query_param: str):

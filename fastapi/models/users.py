@@ -1,6 +1,7 @@
 import collections
 import collections.abc
 import datetime
+from tkinter import N
 import typing
 from annotated_types import MaxLen
 import sqlalchemy as sa
@@ -156,6 +157,8 @@ class AbstractUser(AbstractBaseUser, metaclass=AbstractUserMeta):
 
 class AnonymousUser(AbstractBaseUser):
     __abstract__ = True
+
+    id: None = None # type: ignore
 
     @property
     def is_authenticated(self):

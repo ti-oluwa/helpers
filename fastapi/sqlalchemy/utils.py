@@ -1,7 +1,9 @@
 import typing
 import re
 import sqlalchemy as sa
-from sqlalchemy.orm import InstrumentedAttribute
+from sqlalchemy.orm import InstrumentedAttribute, DeclarativeMeta, MappedColumn
+
+from .models import ModelBase
 
 
 def text_to_tsvector(
@@ -26,3 +28,36 @@ def query_to_regex_pattern(query: str) -> str:
     words = escaped.split(r"\ ")
     pattern = r".*".join(words)
     return f".*{pattern}.*"
+
+
+def build_conditions(
+    filters: typing.Mapping[str, typing.Any],
+    model: typing.Union[typing.Type[DeclarativeMeta], typing.Type[ModelBase]],
+    in_for_iterable: bool = False,
+) -> typing.List[sa.BinaryExpression]:
+    """
+    Build SQLAlchemy conditions from a dictionary of filters.
+
+    Each key-value pair in the dictionary corresponds to a column
+    in the model. The value can be a single value, a list of values,
+    or a boolean indicating the condition.
+
+    :param filters: A dictionary of filters to apply.
+    :param model: The SQLAlchemy model to apply the filters to.
+    :param in_for_iterable: If True, use `in_` for iterable values.
+    :return: A list of SQLAlchemy conditions.
+    :raises AttributeError: If a filter key does not correspond to a column in the model.
+    """
+    conditions = []
+    if not filters:
+        return conditions
+
+    for key, value in filters.items():
+        column: typing.Union[sa.Column, MappedColumn] = getattr(model, key)
+        if in_for_iterable and isinstance(value, (list, tuple, set)):
+            conditions.append(column.in_(value))
+        elif isinstance(value, bool):
+            conditions.append(column.is_(value))
+        else:
+            conditions.append(column == value)
+    return conditions
