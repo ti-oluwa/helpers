@@ -1,9 +1,9 @@
 import functools
+import sys
 import math
 import re
 import typing
 from typing_extensions import Unpack
-import uuid
 from contextlib import asynccontextmanager
 import redis.asyncio as async_pyredis
 
@@ -21,11 +21,16 @@ ConnectionIdentifier = typing.Union[
     CoroutineFunction[[_HTTPConnection], typing.Any],
 ]
 
-_Args = typing.Tuple[typing.Any, ...]
 _WaitPeriod: typing.TypeAlias = int
-ConnectionThrottledHandler = typing.Callable[
-    [_HTTPConnection, _WaitPeriod, Unpack[_Args]], typing.Any
-]
+if sys.version_info >= (3, 12):
+    _Args = typing.Tuple[typing.Any, ...] 
+    ConnectionThrottledHandler: typing.TypeAlias = typing.Callable[
+        [_HTTPConnection, _WaitPeriod, Unpack[_Args]], typing.Any
+    ]
+else:
+    ConnectionThrottledHandler: typing.TypeAlias = typing.Callable[
+        [_HTTPConnection, _WaitPeriod], typing.Any
+    ]
 
 
 async def default_connection_identifier(connection: HTTPConnection) -> str:

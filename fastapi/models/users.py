@@ -1,6 +1,7 @@
 import collections
 import collections.abc
 import datetime
+from tkinter import N
 import typing
 from annotated_types import MaxLen
 import sqlalchemy as sa
@@ -11,7 +12,7 @@ from helpers.fastapi.sqlalchemy import models
 from helpers.fastapi.config import settings
 from helpers.fastapi.apps import discover_apps, discover_models
 from helpers.fastapi.utils import timezone
-from helpers.fastapi.password_validation import validate_password
+from helpers.fastapi.utils.password_validation import validate_password
 from helpers.generics.utils.misc import is_iterable
 
 
@@ -156,6 +157,8 @@ class AbstractUser(AbstractBaseUser, metaclass=AbstractUserMeta):
 
 class AnonymousUser(AbstractBaseUser):
     __abstract__ = True
+
+    id: None = None # type: ignore
 
     @property
     def is_authenticated(self):

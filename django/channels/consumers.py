@@ -177,10 +177,10 @@ class AsyncJsonWebsocketEventConsumer(
         content = await self.on_receive(content, **kwargs)
 
         async with capture_exception(
-            consumer=self, exc_class=type(self).base_exception_captured
+            consumer=self, exc_class=self.base_exception_captured
         ):
             incoming_event = IncomingEvent.load(
-                content, type(self).get_event_type_enum()
+                content, self.get_event_type_enum()
             )
             return await self.handle_incoming_event(incoming_event)
 
@@ -190,7 +190,7 @@ class AsyncJsonWebsocketEventConsumer(
         if handler:
             return await handler(incoming_event)
 
-        if type(self).ignore_unsupported_events:
+        if self.ignore_unsupported_events:
             return
         raise UnsupportedEvent(f"Unsupported event '{incoming_event.type.value}'.")
 

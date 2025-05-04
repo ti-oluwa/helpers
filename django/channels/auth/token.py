@@ -112,7 +112,7 @@ class TokenMiddleware(BaseMiddleware):
     keyword = "Token"
 
     async def __call__(self, scope, receive, send):
-        token_string = await get_token_from_scope(type(self).keyword, scope)
+        token_string = await get_token_from_scope(self.keyword, scope)
         scope[channels_settings.AUTH.SCOPE_USER_KEY] = await get_token_user(
             token_string
         )

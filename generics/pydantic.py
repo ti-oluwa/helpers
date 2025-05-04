@@ -1,4 +1,3 @@
-from calendar import c
 from helpers.dependencies import deps_required
 
 deps_required(
@@ -10,6 +9,7 @@ deps_required(
 import copy
 import typing
 import pydantic
+from pydantic.dataclasses import dataclass
 from pydantic_core import PydanticUndefined, PydanticCustomError
 import functools
 import weakref
@@ -176,7 +176,8 @@ def partial(  # type: ignore[no-redef]
     return create_partial_model(model_cls)  # type: ignore[no-any-return]
 
 
-class _ModelConfig(typing.Generic[Model], typing.NamedTuple):
+@dataclass(frozen=True)
+class _ModelConfig(typing.Generic[Model]):
     """Configuration for partial model creation."""
 
     model: typing.Type[Model]
@@ -295,7 +296,7 @@ def parse_bool_like(v: typing.Any) -> bool:
         return bool(v)
     raise PydanticCustomError(
         "bool_like",
-        "Invalid value for boolean-like field: {value!r}. Expected 'true', 'false', '1', '0', 'yes', 'no', 'y', 'n' or an integer",
+        "Invalid value for boolean-like field: '{value}'. Expected 'true', 'false', '1', '0', 'yes', 'no', 'y', 'n' or an integer",
         {"value": v, "type": type(v).__name__},  # type: ignore[arg-type] # noqa: F821
     )
 

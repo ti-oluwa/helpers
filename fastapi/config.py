@@ -65,12 +65,12 @@ class Settings:
         )
 
     def __setattr__(self, name: typing.Any, value: typing.Any):
-        raise RuntimeError(f"{type(self).__name__} cannot be modified")
+        raise RuntimeError(f"{self.__name__} cannot be modified")
 
     def __getattr__(self, name: str) -> typing.Any:
         if not self.configured:
             raise RuntimeError(
-                f"{type(self).__name__} not configured. "
+                f"{self.__name__} not configured. "
                 f"Run `configure(...)` before attribute access"
             )
         try:

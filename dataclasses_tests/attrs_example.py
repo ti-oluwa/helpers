@@ -3,10 +3,8 @@ import typing
 from datetime import date, datetime
 import zoneinfo
 import attrs
-import cattrs
 
 from helpers.generics.utils.profiling import timeit
-from helpers.generics.attrs import type_cast
 from .mock_data import course_data, student_data, year_data
 from dateutil.parser import parse
 
@@ -14,29 +12,23 @@ from dateutil.parser import parse
 # DATA CLASSES #
 ################
 
-converter = cattrs.Converter()
 
-@type_cast(converter)
-@attrs.define(kw_only=True, auto_attribs=True)
+@attrs.define(slots=True)
 class AcademicYear:
     """Academic year data class"""
 
     id: int = attrs.field()
-    name: str = attrs.field(
-        default=None, validator=attrs.validators.optional(attrs.validators.max_len(100)),
-        converter=str
+    name: typing.Optional[str] = attrs.field(
+        default=None,
+        validator=attrs.validators.optional(attrs.validators.max_len(100)),
+        converter=str,
     )
-    start_date: date = attrs.field(
-        default=None, converter=lambda x: parse(x).date()
-    )
-    end_date: date = attrs.field(
-        default=None, converter=lambda x: parse(x).date()
-    )
+    start_date: date = attrs.field(default=None, converter=lambda x: parse(x).date())
+    end_date: date = attrs.field(default=None, converter=lambda x: parse(x).date())
     created_at: datetime = attrs.field(factory=datetime.now)
 
 
-@type_cast(converter)
-@attrs.define(kw_only=True, auto_attribs=True)
+@attrs.define(slots=True)
 class Course:
     """Course data class"""
 
@@ -52,14 +44,15 @@ class Course:
     created_at: datetime = attrs.field(factory=datetime.now)
 
 
-@type_cast(converter)
-@attrs.define(kw_only=True, auto_attribs=True)
+@attrs.define(slots=True)
 class Student:
     """Student data class with multiple fields and a list of enrolled courses"""
 
     id: int = attrs.field()
     name: str = attrs.field(validator=attrs.validators.max_len(100), converter=str)
-    age: int = attrs.field(validator=attrs.validators.in_(range(18, 101)), converter=int)
+    age: int = attrs.field(
+        validator=attrs.validators.in_(range(18, 101)), converter=int
+    )
     year: AcademicYear = attrs.field()
     email: typing.Optional[str] = attrs.field(default=None)
     phone: typing.Optional[str] = attrs.field(default=None)
@@ -80,28 +73,26 @@ def load_data(
 
 
 def example():
-    try:
-        import rich
+    # try:
+    #     import rich
 
-        log = rich.print
-    except ImportError:
-        log = print
+    #     log = rich.print
+    # except ImportError:
+    #     log = print
 
     years = load_data(year_data, AcademicYear)
     courses = load_data(course_data, Course)
-    # students = load_data(student_data, Student)
+    students = load_data(student_data, Student)
 
-    # for student in students:
-    #     log(attrs.asdict(student))
-    #     log("\n")
+    for student in students:
+        attrs.asdict(student, recurse=True)
 
-    # for course in courses:
-    #     log(attrs.asdict(course))
-    #     log("\n")
+    for course in courses:
+        attrs.asdict(course, recurse=True)
 
-    # for year in years:
-    #     log(attrs.asdict(year))
-    #     log("\n")
+    for year in years:
+        attrs.asdict(year, recurse=True)
+
 
 @timeit("attrs_test")
 def test(n: int):

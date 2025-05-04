@@ -82,7 +82,7 @@ class QueryDictQuerySetFilterer(Generic[M]):
         :param context: Dictionary containing info which may be utilized in the parser methods of the filterer class
         """
         self._error_dict: Mapping[str, List[str]] = {}
-        self.context = type(self).check_context(context)
+        self.context = self.check_context(context)
         self.q = self.parse_querydict(querydict)
 
     @classmethod
@@ -130,7 +130,7 @@ class QueryDictQuerySetFilterer(Generic[M]):
                     raise TypeError(
                         f"parse_{key} method must return a `django.db.models.Q` object."
                     )
-                aggregate.add(query_filter, type(self).join_filters_on)
+                aggregate.add(query_filter, self.join_filters_on)
         return aggregate
 
     def apply_filters(

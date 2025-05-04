@@ -3,7 +3,7 @@ import re
 import string
 import fastapi
 
-from .config import settings
+from ..config import settings
 from helpers.generics.utils.module_loading import import_string
 
 COMMON_PASSWORDS = [

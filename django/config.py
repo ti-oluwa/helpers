@@ -62,7 +62,7 @@ class ValueStoreProxy(collections.abc.Mapping):
 
     def __init__(self, valuestore: Dict[str, Any], *, recursive: bool = False) -> None:
         if recursive:
-            self.valuestore = type(self).nested_valuestores_to_proxies(valuestore)
+            self.valuestore = self.nested_valuestores_to_proxies(valuestore)
         else:
             # Wrapped in MappingProxyType to prevent modification of the original dictionary
             self.valuestore = MappingProxyType(valuestore)
@@ -92,7 +92,7 @@ class ValueStoreProxy(collections.abc.Mapping):
         return getattr(self, name)
 
     def __repr__(self):
-        return f"{type(self).__name__}({repr(self.valuestore)})"
+        return f"{self.__name__}({repr(self.valuestore)})"
 
     def __iter__(self):
         return iter(self.valuestore)

@@ -76,7 +76,7 @@ class MaintenanceMiddleware:
             raise ImproperlyConfigured(f"{self.setting_name}.message must be a string")
 
         if msg.lower().startswith(self.defaults_prefix.lower()):
-            slice_start = len(type(self).defaults_prefix)
+            slice_start = len(self.defaults_prefix)
             template_name = msg[slice_start:]
             msg = await self.get_default_template(template_name)
 
@@ -86,7 +86,7 @@ class MaintenanceMiddleware:
         """Get the default maintenance template content."""
         import aiofiles
 
-        template_path = type(self).templates_dir / f"{name.lower()}.html"
+        template_path = self.templates_dir / f"{name.lower()}.html"
         try:
             if template_path.exists():
                 async with aiofiles.open(template_path, "rb") as file:

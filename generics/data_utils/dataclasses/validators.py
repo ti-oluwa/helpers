@@ -4,7 +4,7 @@ import operator
 import re
 
 from helpers.generics.typing import SupportsRichComparison, SupportsLen
-from .exceptions import FieldError
+from .exceptions import FieldValidationError
 
 
 _Validator: typing.TypeAlias = typing.Callable[
@@ -21,34 +21,13 @@ ComparableValue = SupportsRichComparison
 CountableValue = SupportsLen
 
 
-def is_context_validator(
-    validator: _Validator,
-) -> bool:
-    """Return True if the validator is a context validator."""
-    return getattr(validator, "requires_context", False)
-
-
-class FieldValidator:
-    __slots__ = ("func", "requires_context", "message")
-
-    def __init__(
-        self,
-        func: _Validator,
-        *,
-        requires_context: bool = False,
-        message: typing.Optional[str] = None,
-    ):
-        self.func = func
-        self.requires_context = requires_context
-        self.message = message
+class FieldValidator(typing.NamedTuple):
+    func: _Validator
+    message: typing.Optional[str] = None
 
     @property
-    def __doc__(self) -> typing.Optional[str]:  # type: ignore
-        return self.func.__doc__
-
-    @property
-    def __name__(self):
-        return repr(self)
+    def name(self) -> str:
+        return self.func.__name__
 
     def __call__(
         self,
@@ -57,20 +36,20 @@ class FieldValidator:
         instance: typing.Optional[typing.Any] = None,
     ):
         try:
-            if self.requires_context:
-                self.func(value, field, instance)
-            else:
-                self.func(value, None, None)
+            self.func(value, field, instance)
         except (ValueError, TypeError) as exc:
             msg = self.message or str(exc)
-            raise FieldError(
+            name = field.effective_name if field else "value"
+            raise FieldValidationError(
                 msg.format_map(
                     {
-                        "name": field.get_name() if field else "value",
+                        "name": field.effective_name if field else "value",
                         "value": value,
                         "field": field,
                     }
-                )
+                ),
+                name,
+                value,
             ) from exc
 
     def __hash__(self) -> int:
@@ -78,9 +57,6 @@ class FieldValidator:
             return hash(self.func)
         except TypeError:
             return hash(id(self.func))
-
-    def __repr__(self) -> str:
-        return f"{type(self).__name__}({repr(self.func)})"
 
 
 def load_validators(
@@ -96,34 +72,80 @@ def load_validators(
         if not callable(validator):
             raise TypeError(f"Field validator '{validator}' is not callable.")
 
-        loaded_validators.add(
-            FieldValidator(validator, requires_context=is_context_validator(validator))
-        )
+        loaded_validators.add(FieldValidator(validator))
     return loaded_validators
 
 
-_NUMBER_VALIDATION_FAILURE_MESSAGE = "'{value} {symbol} {bound}' is not True"
+def pipe(
+    *validators: typing.Union[_Validator, FieldValidator],
+) -> FieldValidator:
+    """
+    A function that takes a list of validators and returns a single validator
+    that applies all the validators in sequence.
+
+    :param validators: A list of validator functions
+    :return: A single validator function
+    """
+    if not validators:
+        raise ValueError("At least one validator must be provided.")
+
+    loaded_validators = load_validators(*validators)
+
+    def validation_pipeline(
+        value: typing.Any,
+        field: typing.Optional[typing.Any] = None,
+        instance: typing.Optional[typing.Any] = None,
+    ):
+        nonlocal loaded_validators
+
+        for validator in loaded_validators:
+            validator(value, field, instance)
+
+    validation_pipeline.__name__ = f"pipe({[v.name for v in loaded_validators]})"
+    return FieldValidator(validation_pipeline)
+
+
+_NUMBER_VALIDATION_FAILURE_MESSAGE = (
+    "'{value} {symbol} {bound}' is not True for {name!r}"
+)
 
 
 def number_validator_factory(
-    comparison_func: typing.Callable[[ComparableValue, Bound], bool], symbol: str
+    comparison_func: typing.Callable[[ComparableValue, Bound], bool],
+    symbol: str,
 ):
-    def validator_factory(bound: Bound, message: typing.Optional[str] = None):
+    """
+    Builds a validator that performs a number comparison.
+
+    :param comparison_func: The comparison function to use
+    :param symbol: The symbol to use in the error message
+    :return: A validator function
+    """
+
+    def validator_factory(
+        bound: Bound,
+        message: typing.Optional[str] = None,
+        pre_validation_hook: typing.Optional[
+            typing.Callable[[typing.Any], ComparableValue]
+        ] = None,
+    ) -> FieldValidator:
         global _NUMBER_VALIDATION_FAILURE_MESSAGE
 
         msg = message or _NUMBER_VALIDATION_FAILURE_MESSAGE
 
         def validator(
-            value: typing.Union[ComparableValue, typing.Any],
+            value: typing.Any,
             field: typing.Optional[typing.Any] = None,
             instance: typing.Optional[typing.Any] = None,
         ):
             nonlocal msg
 
+            if pre_validation_hook:
+                value = pre_validation_hook(value)
             if comparison_func(value, bound):
                 return
 
-            name = field.get_name() if field else "value"
+            name = field.effective_name if field else "value"
             raise ValueError(
                 msg.format_map(
                     {
@@ -134,13 +156,14 @@ def number_validator_factory(
                         "field": field,
                     }
                 ),
+                name,
                 value,
                 bound,
                 symbol,
             )
 
         validator.__name__ = f"value_{symbol}_{bound}"
-        return FieldValidator(validator, requires_context=True)
+        return FieldValidator(validator)
 
     validator_factory.__name__ = f"value_{symbol}_validator_factory"
     return validator_factory
@@ -157,13 +180,19 @@ def number_range(
     min_val: SupportsRichComparison,
     max_val: SupportsRichComparison,
     message: typing.Optional[str] = None,
-):
+    pre_validation_hook: typing.Optional[
+        typing.Callable[[typing.Any], ComparableValue]
+    ] = None,
+) -> FieldValidator:
     """
     Number range validator.
 
     :param min_val: Minimum allowed value
     :param max_val: Maximum allowed value
     :param message: Error message template
+    :param pre_validation_hook: A function to preprocess the value before validation
+    :return: A validator function
+    :raises ValueError: If the value is not within the specified range
     """
     msg = message or "'{name}' must be between {min} and {max}"
 
@@ -172,12 +201,21 @@ def number_range(
         field: typing.Optional[typing.Any] = None,
         instance: typing.Optional[typing.Any] = None,
     ):
+        nonlocal msg
+        if pre_validation_hook:
+            value = pre_validation_hook(value)
         if value < min_val or value > max_val:
-            name = field.get_name() if field else "value"
-            raise ValueError(msg.format(name=name, min=min_val, max=max_val))
+            name = field.effective_name if field else "value"
+            raise ValueError(
+                msg.format(name=name, min=min_val, max=max_val),
+                name,
+                value,
+                min_val,
+                max_val,
+            )
 
     validator.__name__ = f"value_between_{min_val}_{max_val}"
-    return FieldValidator(validator, requires_context=True)
+    return FieldValidator(validator)
 
 
 _LENGTH_VALIDATION_FAILURE_MESSAGE = (
@@ -188,7 +226,13 @@ _LENGTH_VALIDATION_FAILURE_MESSAGE = (
 def length_validator_factory(
     comparison_func: typing.Callable[[int, Bound], bool], symbol: str
 ):
-    def validator_factory(bound: Bound, message: typing.Optional[str] = None):
+    def validator_factory(
+        bound: Bound,
+        message: typing.Optional[str] = None,
+        pre_validation_hook: typing.Optional[
+            typing.Callable[[typing.Any], CountableValue]
+        ] = None,
+    ) -> FieldValidator:
         global _LENGTH_VALIDATION_FAILURE_MESSAGE
 
         msg = message or _LENGTH_VALIDATION_FAILURE_MESSAGE
@@ -197,12 +241,14 @@ def length_validator_factory(
             value: typing.Union[CountableValue, typing.Any],
             field: typing.Optional[typing.Any] = None,
             instance: typing.Optional[typing.Any] = None,
-        ):
+        ) -> None:
             nonlocal msg
 
+            if pre_validation_hook:
+                value = pre_validation_hook(value)
             if comparison_func(len(value), bound):
                 return
-            name = field.get_name() if field else "value"
+            name = field.effective_name if field else "value"
             length = len(value)
             raise ValueError(
                 msg.format_map(
@@ -215,6 +261,7 @@ def length_validator_factory(
                         "length": length,
                     }
                 ),
+                name,
                 value,
                 bound,
                 symbol,
@@ -222,7 +269,7 @@ def length_validator_factory(
             )
 
         validator.__name__ = f"value_length_{symbol}_{bound}"
-        return FieldValidator(validator, requires_context=True)
+        return FieldValidator(validator)
 
     validator_factory.__name__ = f"value_length_{symbol}_validator_factory"
     return validator_factory
@@ -241,23 +288,24 @@ def pattern(
     flags: typing.Union[re.RegexFlag, typing.Literal[0]] = 0,
     func: typing.Optional[typing.Callable] = None,
     message: typing.Optional[str] = None,
+    pre_validation_hook: typing.Optional[
+        typing.Callable[[typing.Any], typing.Any]
+    ] = None,
 ):
     r"""
     A validator that raises `ValueError` if the initializer is called with a
     string that doesn't match *regex*.
 
-    Args:
-        regex (str, re.Pattern):
-            A regex string or precompiled pattern to match against
-
-        flags (int):
-            Flags that will be passed to the underlying re function (default 0)
-
-        func (typing.Callable):
-            Which underlying `re` function to call. Valid options are
-            `re.fullmatch`, `re.search`, and `re.match`; the default `None`
-            means `re.fullmatch`. For performance reasons, the pattern is
-            always precompiled using `re.compile`.
+    :param regex: A regex string or precompiled pattern to match against
+    :param message: Error message template
+    :param flags: Flags that will be passed to the underlying re function (default 0)
+    :param func: Which underlying `re` function to call. Valid options are
+        `re.fullmatch`, `re.search`, and `re.match`; the default `None`
+        means `re.fullmatch`. For performance reasons, the pattern is
+        always precompiled using `re.compile`.
+    :param pre_validation_hook: A function to preprocess the value before matching
+    :return: A validator function
+    :raises ValueError: If the value does not match the regex
     """
     global _NO_MATCH_MESSAGE
 
@@ -292,8 +340,10 @@ def pattern(
     ):
         nonlocal msg
 
+        if pre_validation_hook:
+            value = pre_validation_hook(value)
         if not match_func(value):
-            name = field.get_name() if field else "value"
+            name = field.effective_name if field else "value"
             raise ValueError(
                 msg.format_map(
                     {
@@ -302,12 +352,13 @@ def pattern(
                         "value": value,
                     }
                 ),
+                name,
                 pattern,
                 value,
             )
 
     validator.__name__ = f"validate_pattern_{pattern.pattern!r}"
-    return FieldValidator(validator, requires_context=True)
+    return FieldValidator(validator)
 
 
 _INSTANCE_CHECK_FAILURE_MESSAGE = "Value must be an instance of {cls!r}"
@@ -316,15 +367,19 @@ _INSTANCE_CHECK_FAILURE_MESSAGE = "Value must be an instance of {cls!r}"
 def instance_of(
     cls: typing.Union[typing.Type, typing.Tuple[typing.Type, ...]],
     message: typing.Optional[str] = None,
-):
+    pre_validation_hook: typing.Optional[
+        typing.Callable[[typing.Any], typing.Any]
+    ] = None,
+) -> FieldValidator:
     """
     A validator that raises `ValueError` if the initializer is called with a
     value that is not an instance of *cls*.
 
-    Args:
-        cls (type):
-            The type to check against.
-
+    :param cls: A type or tuple of types to check against
+    :param message: Error message template
+    :param pre_validation_hook: A function to preprocess the value before validation
+    :return: A validator function
+    :raises ValueError: If the value is not an instance of the specified type
     """
     global _INSTANCE_CHECK_FAILURE_MESSAGE
 
@@ -337,18 +392,21 @@ def instance_of(
     ):
         nonlocal msg
 
+        if pre_validation_hook:
+            value = pre_validation_hook(value)
         if not isinstance(value, cls):
-            name = field.get_name() if field else "value"
+            name = field.effective_name if field else "value"
             raise ValueError(
                 msg.format_map(
                     {"cls": cls, "value": value, "name": name, "field": field}
                 ),
+                name,
                 value,
                 cls,
             )
 
     validator.__name__ = f"isinstance_of_{cls!r}"
-    return FieldValidator(validator, requires_context=True)
+    return FieldValidator(validator)
 
 
 _SUBCLASS_CHECK_FAILURE_MESSAGE = "Value must be a subclass of {cls!r}"
@@ -357,15 +415,19 @@ _SUBCLASS_CHECK_FAILURE_MESSAGE = "Value must be a subclass of {cls!r}"
 def subclass_of(
     cls: typing.Union[typing.Type, typing.Tuple[typing.Type, ...]],
     message: typing.Optional[str] = None,
-):
+    pre_validation_hook: typing.Optional[
+        typing.Callable[[typing.Any], typing.Any]
+    ] = None,
+) -> FieldValidator:
     """
     A validator that raises `ValueError` if the initializer is called with a
     value that is not a subclass of *cls*.
 
-    Args:
-        cls (type):
-            The type to check against.
-
+    :param cls: A type or tuple of types to check against
+    :param message: Error message template
+    :param pre_validation_hook: A function to preprocess the value before validation
+    :return: A validator function
+    :raises ValueError: If the value is not a subclass of the specified type
     """
     global _SUBCLASS_CHECK_FAILURE_MESSAGE
 
@@ -378,28 +440,30 @@ def subclass_of(
     ):
         nonlocal msg
 
+        if pre_validation_hook:
+            value = pre_validation_hook(value)
         if not (inspect.isclass(value) and issubclass(value, cls)):
-            name = field.get_name() if field else "value"
+            name = field.effective_name if field else "value"
             raise ValueError(
                 msg.format_map(
                     {"cls": cls, "value": value, "name": name, "field": field}
                 ),
+                name,
                 value,
                 cls,
             )
 
     validator.__name__ = f"issubclass_of_{cls!r}"
-    return FieldValidator(validator, requires_context=True)
+    return FieldValidator(validator)
 
 
-def optional(validator: _Validator):
+def optional(validator: _Validator) -> FieldValidator:
     """
     A validator that allows `None` as a valid value for the field.
 
-    Args:
-        validator (typing.Callable):
-            The validator to apply to the field, if the field is not `None`.
-
+    :param validator: The validator to apply to the field, if the field is not `None`
+    :return: A validator function that applies the given validator if the value is not `None`
+    :raises ValueError: If the value is not `None` and does not pass the validator
     """
     _validator = load_validators(validator).pop()
 
@@ -415,21 +479,28 @@ def optional(validator: _Validator):
         return _validator(value, field, instance)
 
     optional_validator.__name__ = f"optional({validator.__name__})"
-    return FieldValidator(optional_validator, requires_context=True)
+    return FieldValidator(optional_validator)
 
 
 _IN_CHECK_FAILURE_MESSAGE = "Value must be in {choices!r}"
 
 
-def in_(choices: typing.Iterable, message: typing.Optional[str] = None):
+def in_(
+    choices: typing.Iterable[typing.Any],
+    message: typing.Optional[str] = None,
+    pre_validation_hook: typing.Optional[
+        typing.Callable[[typing.Any], typing.Any]
+    ] = None,
+) -> FieldValidator:
     """
     A validator that raises `ValueError` if the initializer is called with a
     value that is not in *choices*.
 
-    Args:
-        choices (Iterable):
-            The iterable to check against.
-
+    :param choices: An iterable of valid values
+    :param message: Error message template
+    :param pre_validation_hook: A function to preprocess the value before validation
+    :return: A validator function
+    :raises ValueError: If the value is not in the specified choices
     """
     global _IN_CHECK_FAILURE_MESSAGE
 
@@ -442,32 +513,42 @@ def in_(choices: typing.Iterable, message: typing.Optional[str] = None):
     ):
         nonlocal msg
 
+        if pre_validation_hook:
+            value = pre_validation_hook(value)
         if value not in choices:
-            name = field.get_name() if field else "value"
+            name = field.effective_name if field else "value"
             raise ValueError(
                 msg.format_map(
                     {"choices": choices, "value": value, "name": name, "field": field}
                 ),
+                name,
                 value,
                 choices,
             )
 
     validator.__name__ = f"member_of_{choices!r}"
-    return FieldValidator(validator, requires_context=True)
+    return FieldValidator(validator)
 
 
 _NEGATION_CHECK_FAILURE_MESSAGE = "Value must not validate {validator!r}"
 
 
-def not_(validator: typing.Callable, message: typing.Optional[str] = None):
+def not_(
+    validator: _Validator,
+    message: typing.Optional[str] = None,
+    pre_validation_hook: typing.Optional[
+        typing.Callable[[typing.Any], typing.Any]
+    ] = None,
+) -> FieldValidator:
     """
     A validator that raises `ValueError` if the initializer is called with a
     value that validates against *validator*.
 
-    Args:
-        validator (typing.Callable):
-            The validator to check against.
-
+    :param validator: The validator to check against
+    :param message: Error message template
+    :param pre_validation_hook: A function to preprocess the value before validation
+    :return: A validator function
+    :raises ValueError: If the value validates against the specified validator
     """
     global _NEGATION_CHECK_FAILURE_MESSAGE
 
@@ -481,32 +562,34 @@ def not_(validator: typing.Callable, message: typing.Optional[str] = None):
     ):
         nonlocal msg
 
+        if pre_validation_hook:
+            value = pre_validation_hook(value)
         try:
             _validator(value, field, instance)
         except ValueError:
             return
-        name = field.get_name() if field else "value"
+        name = field.effective_name if field else "value"
         raise ValueError(
             msg.format_map(
                 {"validator": validator, "value": value, "name": name, "field": field}
             ),
+            name,
             value,
             validator,
         )
 
     negative_validator.__name__ = f"negate({validator.__name__})"
-    return FieldValidator(negative_validator, requires_context=True)
+    return FieldValidator(negative_validator)
 
 
-def and_(*validators: typing.Callable):
+def and_(*validators: _Validator) -> FieldValidator:
     """
     A validator that raises `ValueError` if the initializer is called with a
     value that does not validate against all of *validators*.
 
-    Args:
-        *validators (typing.Callable):
-            The validators to check against.
-
+    :param validators: The validators to check against
+    :return: A validator function
+    :raises ValueError: If the value does not validate against all of the specified validators
     """
 
     def validator(
@@ -519,7 +602,7 @@ def and_(*validators: typing.Callable):
         return
 
     validator.__name__ = f"conjunction({[v.__name__ for v in validators]})"
-    return FieldValidator(validator, requires_context=True)
+    return FieldValidator(validator)
 
 
 _DISJUNCTION_CHECK_FAILURE_MESSAGE = (
@@ -527,15 +610,22 @@ _DISJUNCTION_CHECK_FAILURE_MESSAGE = (
 )
 
 
-def or_(*validators: typing.Callable, message: typing.Optional[str] = None):
+def or_(
+    *validators: _Validator,
+    message: typing.Optional[str] = None,
+    pre_validation_hook: typing.Optional[
+        typing.Callable[[typing.Any], typing.Any]
+    ] = None,
+):
     """
     A validator that raises `ValueError` if the initializer is called with a
     value that does not validate against any of *validators*.
 
-    Args:
-        *validators (typing.Callable):
-            The validators to check against.
-
+    :param validators: The validators to check against
+    :param message: Error message template
+    :param pre_validation_hook: A function to preprocess the value before validation
+    :return: A validator function
+    :raises ValueError: If the value does not validate against any of the specified validators
     """
     global _DISJUNCTION_CHECK_FAILURE_MESSAGE
 
@@ -548,13 +638,16 @@ def or_(*validators: typing.Callable, message: typing.Optional[str] = None):
     ):
         nonlocal msg
 
+        if pre_validation_hook:
+            value = pre_validation_hook(value)
+
         for validator in validators:
             try:
                 validator(value, field, instance)
                 return
             except ValueError:
                 continue
-        name = field.get_name() if field else "value"
+        name = field.effective_name if field else "value"
         raise ValueError(
             msg.format_map(
                 {
@@ -564,6 +657,7 @@ def or_(*validators: typing.Callable, message: typing.Optional[str] = None):
                     "field": field,
                 }
             ),
+            name,
             value,
             [v.__name__ for v in validators],
         )
@@ -577,12 +671,14 @@ def _is_callable(
     field: typing.Optional[typing.Any] = None,
     instance: typing.Optional[typing.Any] = None,
 ):
+    """Check if the value is callable."""
     if not callable(value):
-        name = field.get_name() if field else "value"
+        name = field.effective_name if field else "value"
         raise ValueError(
             f"'{name}' must be callable",
+            name,
             value,
         )
 
 
-is_callable = FieldValidator(_is_callable, requires_context=True)
+is_callable = FieldValidator(_is_callable)

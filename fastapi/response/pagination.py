@@ -1,4 +1,5 @@
 import typing
+from annotated_types import Ge
 
 import pydantic
 from starlette.requests import Request
@@ -10,7 +11,7 @@ T = typing.TypeVar("T")
 
 @typing.final
 class PaginatedData(pydantic.BaseModel, typing.Generic[T]):
-    count: pydantic.PositiveInt
+    count: typing.Annotated[int, Ge(0)]
     limit: int
     offset: int
     next: typing.Optional[pydantic.StrictStr]

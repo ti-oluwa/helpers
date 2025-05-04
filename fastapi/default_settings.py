@@ -3,8 +3,6 @@ import fastapi
 import pydantic
 import starlette.exceptions
 
-from helpers.generics.utils.aio import R
-
 
 INSTALLED_APPS: typing.Sequence[str] = []
 

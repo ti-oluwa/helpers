@@ -38,7 +38,7 @@ class FormatJSONResponseMiddleware(MiddlewareMixin):
         self, *args, **kwargs
     ) -> None:
         super().__init__(*args, **kwargs)
-        self.formatter = type(self).get_formatter()
+        self.formatter = self.get_formatter()
 
     @classmethod
     @functools.cache
@@ -170,7 +170,7 @@ class MaintenanceMiddleware(MiddlewareMixin):
         self, *args, **kwargs
     ) -> None:
         super().__init__(*args, **kwargs)
-        self.settings: Mapping[str, Any] = getattr(settings, type(self).setting_name)
+        self.settings: Mapping[str, Any] = getattr(settings, self.setting_name)
 
     def _maintenance_mode_on(self) -> bool:
         """Check if the application is in maintenance mode."""
@@ -185,7 +185,7 @@ class MaintenanceMiddleware(MiddlewareMixin):
             raise ImproperlyConfigured(f"{self.setting_name}.message must be a string")
 
         if msg.lower().startswith(self.defaults_prefix.lower()):
-            slice_start = len(type(self).defaults_prefix)
+            slice_start = len(self.defaults_prefix)
             template_name = msg[slice_start:]
             msg = self.get_default_template(template_name)
 
@@ -193,7 +193,7 @@ class MaintenanceMiddleware(MiddlewareMixin):
 
     def get_default_template(self, name: str) -> Union[bytes, None]:
         """Get the default maintenance template content."""
-        template_path = type(self).templates_dir / f"{name.lower()}.html"
+        template_path = self.templates_dir / f"{name.lower()}.html"
         try:
             if template_path.exists():
                 with open(template_path, "rb") as file:

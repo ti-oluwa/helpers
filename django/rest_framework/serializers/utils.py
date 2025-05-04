@@ -7,7 +7,7 @@ class UserNotFoundInContext(Exception):
 
 
 def get_user_from_context(
-    context: typing.Dict[str, typing.Any],
+    context: typing.Optional[typing.Dict[str, typing.Any]],,
     *,
     user_key: str = "user",
     raise_notfound: bool = False,

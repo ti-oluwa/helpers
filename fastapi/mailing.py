@@ -1,10 +1,16 @@
+from helpers.dependencies import deps_required
+
+deps_required(
+    {
+        "fastapi_mail": "fastapi-mail",
+    }
+)
+
 import fastapi
 import fastapi_mail
 import typing
 
-import fastapi_mail.errors
-
-from .config import settings
+from helpers.fastapi.config import settings
 
 
 def get_connection(connection: str = "fastapi_mail") -> fastapi_mail.ConnectionConfig:

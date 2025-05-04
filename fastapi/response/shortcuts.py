@@ -1,4 +1,4 @@
-from enum import StrEnum
+from enum import Enum
 import typing
 from types import NoneType
 
@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 from helpers.logging import log_exception
 
 
-class Status(StrEnum):
+class Status(Enum):
     """Response status."""
 
     SUCCESS = "success"
@@ -29,9 +29,16 @@ T = typing.TypeVar(
     bool,
     BaseModel,
     NoneType,
+    typing.Any,
     covariant=True,
 )
-E = typing.TypeVar("E", typing.Sequence, dict, NoneType, contravariant=True)
+E = typing.TypeVar(
+    "E",
+    typing.Sequence,
+    typing.Iterable,
+    dict,
+    NoneType,
+)
 
 
 @typing.final
