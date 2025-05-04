@@ -94,7 +94,7 @@ class MappingProxy(collections.abc.Mapping):
         return MappingProxyType(new_mapping)
 
     def __setattr__(self, attr, value):
-        raise RuntimeError(f"{type(self).__name__} instance cannot be modified")
+        raise RuntimeError(f"{self.__name__} instance cannot be modified")
 
     def __getattr__(self, attr: typing.Any) -> typing.Union["MappingProxy", typing.Any]:
         try:
@@ -113,7 +113,7 @@ class MappingProxy(collections.abc.Mapping):
 
     def __repr__(self) -> str:
         return (
-            f"{type(self).__name__}{repr(self._wrapped).removeprefix('mappingproxy')}"
+            f"{self.__name__}{repr(self._wrapped).removeprefix('mappingproxy')}"
         )
 
     def __iter__(self):

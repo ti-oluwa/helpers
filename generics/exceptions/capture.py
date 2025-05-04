@@ -481,9 +481,9 @@ class ExceptionCaptor(ControllerContextDecorator[ExceptionType, ResponseType]):
         self.target = tuple(target_exceptions)
         self.content = content
         self.prioritize_content = prioritize_content
-        self.code = code or type(self).DEFAULT_STATUS_CODE
+        self.code = code or self.DEFAULT_STATUS_CODE
 
-        self.response_type = response_type or type(self).DEFAULT_RESPONSE_TYPE
+        self.response_type = response_type or self.DEFAULT_RESPONSE_TYPE
         if self.response_type is None:
             raise ValueError(
                 "`response_type` must be provided if DEFAULT_RESPONSE_TYPE is not set"
@@ -491,11 +491,11 @@ class ExceptionCaptor(ControllerContextDecorator[ExceptionType, ResponseType]):
 
         response_kwargs = response_kwargs or {}
         response_kwargs.setdefault(
-            type(self).CONTENT_TYPE_KWARG, type(self).DEFAULT_CONTENT_TYPE
+            self.CONTENT_TYPE_KWARG, self.DEFAULT_CONTENT_TYPE
         )
         self.response_kwargs = response_kwargs
         self.response_formatter = (
-            response_formatter or type(self).DEFAULT_RESPONSE_FORMATTER
+            response_formatter or self.DEFAULT_RESPONSE_FORMATTER
         )
         self._callback_counter: int = 0
         self.callbacks: typing.List[PrioritizedCallback] = []
@@ -523,7 +523,7 @@ class ExceptionCaptor(ControllerContextDecorator[ExceptionType, ResponseType]):
         return self._callback_counter
 
     def __repr__(self) -> str:
-        return f"{type(self).__name__}(target={self.target}, code={self.code})"
+        return f"{self.__name__}(target={self.target}, code={self.code})"
 
     def __copy__(self) -> Self:
         args = self._init_args
@@ -543,7 +543,7 @@ class ExceptionCaptor(ControllerContextDecorator[ExceptionType, ResponseType]):
     def verify_target(self, exc_type: typing.Type[ExceptionType]) -> bool:
         """Returns True if the exception type is of the target type(s). Otherwise, False."""
         return issubclass(exc_type, self.target) and not issubclass(
-            exc_type, type(self).ExceptionCaptured
+            exc_type, self.ExceptionCaptured
         )
 
     def get_exception_detail(self, exc: ExceptionType) -> typing.Any:
@@ -557,11 +557,11 @@ class ExceptionCaptor(ControllerContextDecorator[ExceptionType, ResponseType]):
             content = content(exc)
 
         exc_detail = self.get_exception_detail(exc)
-        special_exceptions = tuple(type(self).EXCEPTION_CODES.keys())
+        special_exceptions = tuple(self.EXCEPTION_CODES.keys())
         is_special_exception = isinstance(exc, special_exceptions)
 
         content_type = self.response_kwargs.get(
-            type(self).CONTENT_TYPE_KWARG, type(self).DEFAULT_CONTENT_TYPE
+            self.CONTENT_TYPE_KWARG, self.DEFAULT_CONTENT_TYPE
         )
         if is_json_content_type(content_type):
             content = merge_json_content_with_exception_detail(
@@ -593,7 +593,7 @@ class ExceptionCaptor(ControllerContextDecorator[ExceptionType, ResponseType]):
 
         # If a status code was defined in `EXCEPTION_CODES`
         # for the exception type, return the status code
-        for exc_class, code in type(self).EXCEPTION_CODES.items():
+        for exc_class, code in self.EXCEPTION_CODES.items():
             if isinstance(exc, exc_class):
                 return code
         else:
@@ -612,11 +612,11 @@ class ExceptionCaptor(ControllerContextDecorator[ExceptionType, ResponseType]):
         headers = kwargs.get("headers", {})
         if headers and "Content-Type" in headers:
             # Header's "Content-Type" takes precedence over `CONTENT_TYPE_KWARG`
-            kwargs.pop(type(self).CONTENT_TYPE_KWARG, None)
+            kwargs.pop(self.CONTENT_TYPE_KWARG, None)
             kwargs["headers"] = headers
 
         status_code = self.get_exception_status_code(exc)
-        return {**kwargs, type(self).STATUS_CODE_KWARG: status_code}
+        return {**kwargs, self.STATUS_CODE_KWARG: status_code}
 
     def construct_response(self, exc: ExceptionType) -> ResponseType:
         """Construct the response to be returned."""
@@ -637,7 +637,7 @@ class ExceptionCaptor(ControllerContextDecorator[ExceptionType, ResponseType]):
         if formatted_response.status_code >= 500 and self.log_errors:  # type: ignore
             log_exception(exc, logger=self.logger)
 
-        raise type(self).ExceptionCaptured(
+        raise self.ExceptionCaptured(
             captive=exc,
             captor=self,
             response=formatted_response,  # type: ignore
@@ -659,7 +659,7 @@ class ExceptionCaptor(ControllerContextDecorator[ExceptionType, ResponseType]):
 
         if formatted_response.status_code >= 500 and self.log_errors:  # type: ignore
             await self.run_async(log_exception, exc, logger=self.logger)
-        raise type(self).ExceptionCaptured(
+        raise self.ExceptionCaptured(
             captive=exc,
             captor=self,
             response=formatted_response,  # type: ignore

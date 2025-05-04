@@ -13,7 +13,7 @@ from dateutil.parser import parse
 ################
 
 
-@attrs.define(kw_only=True, auto_attribs=True, repr=True)
+@attrs.define(slots=True)
 class AcademicYear:
     """Academic year data class"""
 
@@ -28,7 +28,7 @@ class AcademicYear:
     created_at: datetime = attrs.field(factory=datetime.now)
 
 
-@attrs.define(kw_only=True, auto_attribs=True, repr=True)
+@attrs.define(slots=True)
 class Course:
     """Course data class"""
 
@@ -44,7 +44,7 @@ class Course:
     created_at: datetime = attrs.field(factory=datetime.now)
 
 
-@attrs.define(kw_only=True, auto_attribs=True, repr=True)
+@attrs.define(slots=True)
 class Student:
     """Student data class with multiple fields and a list of enrolled courses"""
 
@@ -73,25 +73,25 @@ def load_data(
 
 
 def example():
-    try:
-        import rich
+    # try:
+    #     import rich
 
-        log = rich.print
-    except ImportError:
-        log = print
+    #     log = rich.print
+    # except ImportError:
+    #     log = print
 
     years = load_data(year_data, AcademicYear)
     courses = load_data(course_data, Course)
     students = load_data(student_data, Student)
 
     for student in students:
-        attrs.asdict(student)
+        attrs.asdict(student, recurse=True)
 
     for course in courses:
-        attrs.asdict(course)
+        attrs.asdict(course, recurse=True)
 
     for year in years:
-        attrs.asdict(year)
+        attrs.asdict(year, recurse=True)
 
 
 @timeit("attrs_test")

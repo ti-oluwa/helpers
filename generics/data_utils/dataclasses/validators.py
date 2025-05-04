@@ -39,11 +39,11 @@ class FieldValidator(typing.NamedTuple):
             self.func(value, field, instance)
         except (ValueError, TypeError) as exc:
             msg = self.message or str(exc)
-            name = field.get_name() if field else "value"
+            name = field.effective_name if field else "value"
             raise FieldValidationError(
                 msg.format_map(
                     {
-                        "name": field.get_name() if field else "value",
+                        "name": field.effective_name if field else "value",
                         "value": value,
                         "field": field,
                     }
@@ -145,7 +145,7 @@ def number_validator_factory(
             if comparison_func(value, bound):
                 return
 
-            name = field.get_name() if field else "value"
+            name = field.effective_name if field else "value"
             raise ValueError(
                 msg.format_map(
                     {
@@ -205,7 +205,7 @@ def number_range(
         if pre_validation_hook:
             value = pre_validation_hook(value)
         if value < min_val or value > max_val:
-            name = field.get_name() if field else "value"
+            name = field.effective_name if field else "value"
             raise ValueError(
                 msg.format(name=name, min=min_val, max=max_val),
                 name,
@@ -248,7 +248,7 @@ def length_validator_factory(
                 value = pre_validation_hook(value)
             if comparison_func(len(value), bound):
                 return
-            name = field.get_name() if field else "value"
+            name = field.effective_name if field else "value"
             length = len(value)
             raise ValueError(
                 msg.format_map(
@@ -343,7 +343,7 @@ def pattern(
         if pre_validation_hook:
             value = pre_validation_hook(value)
         if not match_func(value):
-            name = field.get_name() if field else "value"
+            name = field.effective_name if field else "value"
             raise ValueError(
                 msg.format_map(
                     {
@@ -395,7 +395,7 @@ def instance_of(
         if pre_validation_hook:
             value = pre_validation_hook(value)
         if not isinstance(value, cls):
-            name = field.get_name() if field else "value"
+            name = field.effective_name if field else "value"
             raise ValueError(
                 msg.format_map(
                     {"cls": cls, "value": value, "name": name, "field": field}
@@ -443,7 +443,7 @@ def subclass_of(
         if pre_validation_hook:
             value = pre_validation_hook(value)
         if not (inspect.isclass(value) and issubclass(value, cls)):
-            name = field.get_name() if field else "value"
+            name = field.effective_name if field else "value"
             raise ValueError(
                 msg.format_map(
                     {"cls": cls, "value": value, "name": name, "field": field}
@@ -516,7 +516,7 @@ def in_(
         if pre_validation_hook:
             value = pre_validation_hook(value)
         if value not in choices:
-            name = field.get_name() if field else "value"
+            name = field.effective_name if field else "value"
             raise ValueError(
                 msg.format_map(
                     {"choices": choices, "value": value, "name": name, "field": field}
@@ -568,7 +568,7 @@ def not_(
             _validator(value, field, instance)
         except ValueError:
             return
-        name = field.get_name() if field else "value"
+        name = field.effective_name if field else "value"
         raise ValueError(
             msg.format_map(
                 {"validator": validator, "value": value, "name": name, "field": field}
@@ -647,7 +647,7 @@ def or_(
                 return
             except ValueError:
                 continue
-        name = field.get_name() if field else "value"
+        name = field.effective_name if field else "value"
         raise ValueError(
             msg.format_map(
                 {
@@ -673,7 +673,7 @@ def _is_callable(
 ):
     """Check if the value is callable."""
     if not callable(value):
-        name = field.get_name() if field else "value"
+        name = field.effective_name if field else "value"
         raise ValueError(
             f"'{name}' must be callable",
             name,

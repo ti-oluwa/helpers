@@ -12,7 +12,7 @@ from helpers.fastapi.sqlalchemy import models
 from helpers.fastapi.config import settings
 from helpers.fastapi.apps import discover_apps, discover_models
 from helpers.fastapi.utils import timezone
-from helpers.fastapi.password_validation import validate_password
+from helpers.fastapi.utils.password_validation import validate_password
 from helpers.generics.utils.misc import is_iterable
 
 

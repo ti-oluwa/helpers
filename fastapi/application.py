@@ -58,7 +58,7 @@ def default_dependencies():
     for dep_path in settings.DEFAULT_DEPENDENCIES:
         if not isinstance(dep_path, str):
             raise ValueError(
-                "Entry in `DEFAULT_DEPENDENCIES` must be a string path to the dependency"
+                "Entry in 'DEFAULT_DEPENDENCIES' must be a string path to the dependency"
             )
         yield Dependency(import_string(dep_path))
 
@@ -72,7 +72,7 @@ def exception_handlers():
             if isinstance(exc, str):
                 exc = import_string(exc)
             else:
-                raise ValueError("Key in EXCEPTION_HANDLERS must be an exception class")
+                raise ValueError("Key in 'EXCEPTION_HANDLERS' must be an exception class")
 
         handler = import_string(handler_path)
         yield exc, handler

@@ -1,9 +1,10 @@
 import typing
 
 try:
-    from typing import ParamSpec
+    from typing import ParamSpec, Self
 except ImportError:
-    from typing_extensions import ParamSpec
+    from typing_extensions import ParamSpec, Self
+
 import time
 from contextlib import ContextDecorator
 import cProfile
@@ -36,8 +37,9 @@ class _timeit(ContextDecorator):
         self.start = None
         self.end = None
 
-    def __enter__(self) -> None:
+    def __enter__(self) -> Self:
         self.start = self.timer_func()
+        return self
 
     def __exit__(self, *exc) -> None:
         if self.start:
@@ -73,7 +75,7 @@ def timeit(
 ) -> typing.Union[_timeit, typing.Callable[_P, _R]]: ...
 
 
-def timeit( # type: ignore
+def timeit(  # type: ignore
     func: typing.Optional[typing.Callable[_P, _R]] = None,
     identifier: typing.Optional[str] = None,
     output: typing.Optional[typing.Callable] = None,
@@ -106,7 +108,7 @@ def timeit( # type: ignore
             use_perf_counter=use_perf_counter,
         )
         if identifier:
-            return timer(identifier) # type: ignore
+            return timer(identifier)  # type: ignore
         return timer
 
     timer = _timeit(
@@ -119,6 +121,144 @@ def timeit( # type: ignore
     return timer
 
 
+StatsData: typing.TypeAlias = typing.Dict[
+    typing.Tuple[str, int, str],
+    typing.Tuple[int, int, float, float, typing.List[typing.Tuple[str, int]]],
+]
+StatOutput: typing.TypeAlias = typing.Union[
+    typing.Callable[
+        [
+            typing.Optional[str],
+            StatsData,
+        ],
+        None,
+    ],
+    typing.Literal["rich", "simple"],
+]
+
+
+def rich_output(
+    identifier: typing.Optional[str],
+    stats_data: StatsData,
+) -> None:
+    from rich.console import Console
+    from rich.table import Table
+
+    console = Console()
+    table = Table(
+        title=f"Profiling Stats: {identifier or 'Code Block'}",
+        show_lines=True,
+        expand=True,
+        border_style="blue",
+    )
+    table.add_column("Function", justify="left", style="cyan", overflow="fold")
+    table.add_column("Total Calls", justify="right", style="magenta")
+    table.add_column("Primitive Calls", justify="right", style="magenta")
+    table.add_column("Total Time (s)", justify="right", style="green")
+    table.add_column("Time/Call (Total)", justify="right", style="green")
+    table.add_column("Cumulative Time (s)", justify="right", style="yellow")
+    table.add_column("Time/Call (Cumulative)", justify="right", style="yellow")
+    table.add_column(
+        "File:Line(Function)", justify="left", style="white", overflow="fold"
+    )
+
+    for func, (cc, nc, tt, ct, callers) in stats_data.items():
+        file_line_func = f"{func[0]}:{func[1]}({func[2]})"
+        table.add_row(
+            func[2],  # Function name
+            str(cc),  # Total calls
+            str(nc),  # Primitive calls
+            f"{tt:.8f}",  # Total time
+            f"{tt / nc if nc else 0:.8f}",  # Per call (total)
+            f"{ct:.8f}",  # Cumulative time
+            f"{ct / cc if cc else 0:.8f}",  # Per call (cumulative)
+            file_line_func,  # File:Line(Function)
+        )
+
+    console.print(table)
+
+
+def simple_output(
+    identifier: typing.Optional[str],
+    stats_data: StatsData,
+    timeunit: float = 1.0,
+) -> None:
+    print(f"\n=== Profiling Stats: {identifier or 'Code Block'} ===\n")
+
+    headers = [
+        "Function Name",
+        "Total Calls",
+        "Primitive Calls",
+        "Total Time (s)",
+        "Time/Call (Total)",
+        "Cumulative Time (s)",
+        "Time/Call (Cumulative)",
+        "File:Line",
+    ]
+
+    col_format = "{:<30} {:>12} {:>16} {:>16} {:>20} {:>22} {:>26}  {:<}"
+    print(col_format.format(*headers))
+    print("-" * 140)
+
+    for func, (cc, nc, tt, ct, callers) in stats_data.items():
+        tt *= timeunit
+        ct *= timeunit
+        per_call_tt = tt / nc if nc else 0.0
+        per_call_ct = ct / cc if cc else 0.0
+
+        print(
+            col_format.format(
+                func[2][:30],  # Function name
+                cc,
+                nc,
+                f"{tt:.6f}",
+                f"{per_call_tt:.6f}",
+                f"{ct:.6f}",
+                f"{per_call_ct:.6f}",
+                f"{func[0]}:{func[1]}",
+            )
+        )
+        print()
+
+
+def get_stats_data(
+    stats: pstats.Stats,
+    timeunit: float = 0,
+    max_rows: typing.Optional[int] = None,
+) -> StatsData:
+    """
+    Extracts and formats profiling stats data from pstats.Stats.
+
+    :param stats: The pstats.Stats object containing profiling data.
+    :param timeunit: Multiplier for converting profiler timer measurements to seconds.
+    :param max_rows: Maximum number of rows to display in the output.
+    :return: A dictionary containing formatted profiling stats.
+    """
+    count = 0
+    if max_rows:
+        count = max_rows
+    elif stats.total_calls > 0:
+        count = stats.total_calls
+    elif stats.total_calls == 0:
+        count = len(stats.stats)
+    if count == 0:
+        raise ValueError("No profiling data available.")
+
+    stats_data: StatsData = {}
+    for func in stats.fcn_list:  # type: ignore
+        if count <= 0:
+            break
+        if func in stats.stats:  # type: ignore
+            filename, lineno, funcname = func
+            cc, nc, tt, ct, callers = stats.stats[func]  # type: ignore
+            if timeunit:
+                tt *= timeunit or 1
+                ct *= timeunit or 1
+            stats_data[(filename, lineno, funcname)] = (cc, nc, tt, ct, callers)
+            count -= 1
+    return stats_data
+
+
 class _Profiler(ContextDecorator):
     """
     Context manager/decorator to profile a function or block of code using cProfile.
@@ -127,9 +267,11 @@ class _Profiler(ContextDecorator):
     def __init__(
         self,
         identifier: typing.Optional[str] = None,
-        output: typing.Optional[typing.Callable] = None,
+        output: StatOutput = "simple",
         timeunit: typing.Optional[float] = None,
+        subcalls: bool = False,
         builtins: bool = False,
+        max_rows: typing.Optional[int] = None,
     ) -> None:
         """
         Initialize the profiler.
@@ -138,30 +280,51 @@ class _Profiler(ContextDecorator):
         :param output: The output/writer function to use. This defaults to `print`.
         :param timeunit: Multiplier for converting profiler timer measurements to seconds.
                           For example, 1e-6 for microseconds.
+        :param subcalls: If True, profile subcalls as well.
+        :param builtins: If True, profile built-in functions.
+        :param max_rows: Maximum number of rows to display in the output.
+            If None, all rows will be displayed. Else, the top N rows will be shown.
         """
         self.identifier = identifier
-        self.output = output or print
-        self.profiler = (
-            cProfile.Profile(timeunit=timeunit, builtins=builtins)
-            if timeunit
-            else cProfile.Profile(builtins=builtins)
-        )
+        if callable(output):
+            self.output = output
+        elif output == "rich":
+            self.output = rich_output
+        elif output == "simple":
+            self.output = simple_output
+        else:
+            raise ValueError("Output must be 'rich', 'simple', or a callable function.")
 
-    def __enter__(self) -> None:
-        self.profiler.enable()
+        self.timeunit = timeunit or 0
+        self.subcalls = subcalls
+        self.builtins = builtins
+        self.profiler = cProfile.Profile(
+            timeunit=self.timeunit,
+            builtins=self.builtins,
+            subcalls=self.subcalls,
+        )
+        self.max_rows = max_rows
+
+    def __enter__(self) -> Self:
+        self.profiler.enable(
+            builtins=self.builtins,
+            subcalls=self.subcalls,
+        )
+        return self
 
     def __exit__(self, *exc) -> None:
         self.profiler.disable()
         stream = io.StringIO()
         stats = pstats.Stats(self.profiler, stream=stream).sort_stats(
-            pstats.SortKey.TIME
+            pstats.SortKey.TIME, pstats.SortKey.CALLS
         )
-        stats.print_stats()
-        info = stream.getvalue()
-        if self.identifier:
-            self.output(f"=== {self.identifier} Profiling Stats ===\n{info.lstrip()}")
-        else:
-            self.output(f"=== Profiling Stats ===\n{info.lstrip()}")
+        stats_data = get_stats_data(
+            stats,
+            timeunit=self.timeunit,
+            max_rows=self.max_rows,
+        )
+        self.output(self.identifier, stats_data)
+        self.profiler.clear()
 
     def __call__(self, func: typing.Callable[_P, _R]) -> typing.Callable[_P, _R]:
         self.identifier = self.identifier or func.__name__
@@ -173,9 +336,11 @@ def profileit(
     identifier: str,
     func: typing.Optional[typing.Callable[_P, _R]] = None,
     *,
-    output: typing.Optional[typing.Callable] = None,
+    output: StatOutput = ...,
     timeunit: typing.Optional[float] = None,
+    subcalls: bool = False,
     builtins: bool = False,
+    max_rows: typing.Optional[int] = None,
 ) -> typing.Union[_Profiler, typing.Callable[_P, _R]]: ...
 
 
@@ -184,18 +349,22 @@ def profileit(
     func: typing.Optional[typing.Callable[_P, _R]] = None,
     *,
     identifier: typing.Optional[str] = None,
-    output: typing.Optional[typing.Callable] = None,
+    output: StatOutput = ...,
     timeunit: typing.Optional[float] = None,
+    subcalls: bool = False,
     builtins: bool = False,
+    max_rows: typing.Optional[int] = None,
 ) -> typing.Union[_Profiler, typing.Callable[_P, _R]]: ...
 
 
-def profileit( # type: ignore
+def profileit(  # type: ignore
     func: typing.Optional[typing.Callable[_P, _R]] = None,
     identifier: typing.Optional[str] = None,
-    output: typing.Optional[typing.Callable] = None,
+    output: StatOutput = "simple",
     timeunit: typing.Optional[float] = None,
+    subcalls: bool = False,
     builtins: bool = False,
+    max_rows: typing.Optional[int] = None,
 ) -> typing.Union[_Profiler, typing.Callable[_P, _R]]:
     """
     Profile a function or block of code. Can be used as a decorator or context manager,
@@ -205,6 +374,9 @@ def profileit( # type: ignore
     :param identifier: A unique identifier for the function or block.
     :param output: The output/writer function to use. This defaults to `print`.
     :param timeunit: Multiplier for converting profiler timer measurements to seconds.
+    :param subcalls: If True, profile subcalls as well.
+    :param builtins: If True, profile built-in functions.
+    :return: A profiler instance or a decorated function.
 
     Example:
     ```python
@@ -214,7 +386,7 @@ def profileit( # type: ignore
         ...
 
     # Usage as a context manager
-    with profileit("search-operation"):
+    with profileit("search-operation", max_count=20, output="rich"):
         ...
     ```
     """
@@ -224,9 +396,11 @@ def profileit( # type: ignore
             output=output,
             timeunit=timeunit,
             builtins=builtins,
+            subcalls=subcalls,
+            max_rows=max_rows,
         )
         if identifier:
-            return profiler(identifier) # type: ignore
+            return profiler(identifier)  # type: ignore
         return profiler
 
     profiler = _Profiler(
@@ -234,6 +408,8 @@ def profileit( # type: ignore
         output=output,
         timeunit=timeunit,
         builtins=builtins,
+        subcalls=subcalls,
+        max_rows=max_rows,
     )
     if func:
         return profiler(func)

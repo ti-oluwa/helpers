@@ -1,4 +1,4 @@
-from enum import StrEnum
+from enum import Enum
 import typing
 from types import NoneType
 
@@ -9,10 +9,9 @@ from fastapi.responses import ORJSONResponse
 from pydantic import BaseModel, Field
 
 from helpers.logging import log_exception
-from helpers.generics.typing import DataclassType
 
 
-class Status(StrEnum):
+class Status(Enum):
     """Response status."""
 
     SUCCESS = "success"
@@ -30,7 +29,7 @@ T = typing.TypeVar(
     bool,
     BaseModel,
     NoneType,
-    DataclassType,
+    typing.Any,
     covariant=True,
 )
 E = typing.TypeVar(

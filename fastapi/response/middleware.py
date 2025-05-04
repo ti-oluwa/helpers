@@ -56,7 +56,7 @@ class FormatJSONResponseMiddleware:
         formatter_path: str = self.settings.get("formatter", "default")
 
         if formatter_path.lower() == "default":
-            formatter = type(self).default_formatter
+            formatter = self.default_formatter
         else:
             formatter = importlib.import_module(formatter_path)
             if not callable(formatter):

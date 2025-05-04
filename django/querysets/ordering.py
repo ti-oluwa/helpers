@@ -23,9 +23,9 @@ class QSOrderer(Generic[M]):
     def __init__(
         self, queryset: Union[models.QuerySet[M], models.manager.BaseManager[M]] = None
     ) -> None:
-        cls_model = type(self).model
+        cls_model = self.model
         if not (cls_model or queryset):
-            raise ValueError(f"Pass in a queryset or set {type(self).__name__}.model")
+            raise ValueError(f"Pass in a queryset or set {self.__name__}.model")
         if (queryset and cls_model) and (queryset.model != cls_model):
             raise ValueError(
                 f"Expected queryset to contain objects of type {cls_model.__name__}"

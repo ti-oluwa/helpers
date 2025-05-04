@@ -122,7 +122,7 @@ class QuantityField(models.CharField):
     def __init__(self, *args, **kwargs) -> None:
         kwargs.setdefault("max_length", 100)
         if kwargs.get("unique", False):
-            warnings.warn(f"{type(self).__name__} does not support unique=True.")
+            warnings.warn(f"{self.__name__} does not support unique=True.")
 
         kwargs["unique"] = False
         super().__init__(*args, **kwargs)

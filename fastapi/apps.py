@@ -2,6 +2,8 @@ import asyncio
 import importlib
 import functools
 import inspect
+import types
+import typing
 
 from .config import settings
 from .exceptions import AppError, AppConfigurationError
@@ -15,7 +17,7 @@ class SubmoduleNotFoundError(AppError):
 class App:
     """A proxy object for an installed app"""
 
-    def __init__(self, path: str):
+    def __init__(self, path: str) -> types.NoneType:
         self._path = path
         try:
             self._module = importlib.import_module(path, package=settings.BASE_DIR.name)
@@ -31,30 +33,30 @@ class App:
         return self._path
 
     @functools.cached_property
-    def apps(self):
+    def apps(self) -> typing.Optional[types.ModuleType]:
         """Shortcut to the app's `apps` submodule"""
         try:
-            return self.get_submodule("apps")
+            return self.submodule("apps")
         except SubmoduleNotFoundError:
             return None
 
     @functools.cached_property
-    def models(self):
+    def models(self) -> typing.Optional[types.ModuleType]:
         """Shortcut to the app's `models` submodule"""
         try:
-            return self.get_submodule("models")
+            return self.submodule("models")
         except SubmoduleNotFoundError:
             return None
 
     @functools.cached_property
-    def commands(self):
+    def commands(self) -> typing.Optional[types.ModuleType]:
         """Shortcut to the app's `commands` submodule"""
         try:
-            return self.get_submodule("commands")
+            return self.submodule("commands")
         except SubmoduleNotFoundError:
             return None
-
-    def get_submodule(self, submodule_path: str):
+        
+    def submodule(self, submodule_path: str)-> types.ModuleType:
         """
         Get a submodule from the app
 
@@ -62,45 +64,35 @@ class App:
         :return: submodule object
         :raises SubmoduleNotFoundError: if submodule is not found in app
         """
-        if not submodule_path:
-            return self._module
+        return get_submodule(self, submodule_path)
 
-        try:
-            submodule = importlib.import_module(
-                f"{self._path}.{submodule_path}", package=settings.BASE_DIR.name
-            )
-        except ImportError as exc:
-            # This means the ImportError was not caused by the submodule not being found
-            # but by some other import issue (such as a missing dependency)
-            if self._path not in str(exc):
-                raise
-            raise SubmoduleNotFoundError(
-                f"Submodule '{submodule_path}' not found in app '{self._path}'"
-            ) from exc
 
-        return submodule
+def get_submodule(app: App, submodule_path: str) -> types.ModuleType:
+    """
+    Get a submodule from the app
 
-    async def configure(self):
-        """
-        Run app's configuration logic
+    :param app: app object
+    :param submodule_path: path to submodule in app
+    :return: submodule object
+    :raises SubmoduleNotFoundError: if submodule is not found in app
+    """
+    if not submodule_path:
+        return app._module
 
-        If the function is not found, this is a no-op
-        """
-        try:
-            apps = self.apps
-            if not apps:
-                return
+    try:
+        submodule = importlib.import_module(
+            f"{app._path}.{submodule_path}", package=settings.BASE_DIR.name
+        )
+    except ImportError as exc:
+        # This means the ImportError was not caused by the submodule not being found
+        # but by some other import issue (such as a missing dependency)
+        if app._path not in str(exc):
+            raise
+        raise SubmoduleNotFoundError(
+            f"Submodule '{submodule_path}' not found in app '{app._path}'"
+        ) from exc
 
-            configure = getattr(apps, "configure", None)
-            if not configure:
-                return
-            if asyncio.iscoroutinefunction(configure):
-                await configure()
-            elif callable(configure):
-                await sync_to_async(configure)()
-        except Exception as exc:
-            raise AppConfigurationError(f"Error configuring app '{self.name}'") from exc
-        return
+    return submodule
 
 
 def discover_apps():
@@ -140,9 +132,32 @@ def discover_models(
                 yield model
 
 
+async def configure(app: App) -> None:
+    """
+    Run app's configuration logic
+
+    If the function is not found, this is a no-op
+    """
+    try:
+        apps = app.apps
+        if not apps:
+            return
+
+        configure = getattr(apps, "configure", None)
+        if not configure:
+            return
+        if asyncio.iscoroutinefunction(configure):
+            await configure()
+        elif callable(configure):
+            await sync_to_async(configure)()
+    except Exception as exc:
+        raise AppConfigurationError(f"Error configuring app '{app.name}'") from exc
+    return
+
+
 async def configure_apps():
     """
     Run configuration logic for all apps in the project
     """
     for app in discover_apps():
-        await app.configure()
+        await configure(app)

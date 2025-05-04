@@ -2,8 +2,9 @@ import typing
 import inspect
 import textwrap
 import types
+from collections import defaultdict
 
-from helpers.generics.utils.misc import is_iterable, is_generic_type
+from .exceptions import SerializationError
 
 P = typing.ParamSpec("P")
 R = typing.TypeVar("R")
@@ -31,6 +32,11 @@ def is_valid_type(o: typing.Any, /) -> bool:
     if isinstance(o, tuple):
         return all(is_concrete_type(obj) for obj in o)
     return is_concrete_type(o)
+
+
+def is_slotted_cls(cls: typing.Type[typing.Any], /) -> bool:
+    """Check if a class has __slots__ defined."""
+    return "__slots__" in cls.__dict__
 
 
 def freeze_iterable(
@@ -231,17 +237,39 @@ def precompile_methods(
         setattr(cls, name, compiled_method)
 
 
-def build_type_repr(
-    type_: typing.Union[typing.Type[typing.Any], typing.Tuple[typing.Type[typing.Any]]],
-) -> str:
-    """Return a string representation of the field type."""
-    if isinstance(type_, typing._SpecialForm):
-        return type_.name
+_Serializer: typing.TypeAlias = typing.Callable[..., typing.Any]
 
-    if is_iterable(type_):
-        return " | ".join([build_type_repr(arg) for arg in type_])
 
-    if is_generic_type(type_):
-        return f"{type_.__origin__.__name__}[{' | '.join([build_type_repr(arg) for arg in typing.get_args(type_)])}]"  # type: ignore
+def _unsupported_serializer(*args, **kwargs) -> None:
+    """Raise an error for unsupported serialization."""
+    raise SerializationError(
+        "Unsupported serialization format. Register a serializer for this format."
+    )
 
-    return type_.__name__ if hasattr(type_, "__name__") else str(type_)  # type: ignore
+
+def _unsupported_serializer_factory():
+    """Return a function that raises an error for unsupported serialization."""
+    return _unsupported_serializer
+
+
+class SerializerRegistry(typing.NamedTuple):
+    """
+    Serializer registry class to handle different serialization formats.
+
+    :param serializer_map: A dictionary mapping format names to their respective serializer functions.
+    """
+
+    serializer_map: typing.DefaultDict[str, _Serializer] = defaultdict(
+        _unsupported_serializer_factory
+    )
+
+    def __call__(self, fmt: str, *args: typing.Any, **kwargs: typing.Any) -> typing.Any:
+        """
+        Serialize data using the specified format.
+
+        :param fmt: The format to serialize to (e.g., 'json', 'xml').
+        :param args: Positional arguments to pass to the format's serializer.
+        :param kwargs: Keyword arguments to pass to the format's serializer.
+        :return: Serialized data in the specified format.
+        """
+        return self.serializer_map[fmt](*args, **kwargs)
