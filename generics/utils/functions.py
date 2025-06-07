@@ -119,15 +119,15 @@ def add_parameter_to_signature(
     import functools
     from typing_extensions import ParamSpec
 
-    _P = ParamSpec("_P")
-    _R = TypeVar("_R")
+    P = ParamSpec("P")
+    R = TypeVar("R")
 
 
     def my_func(a: int, b: str = "default"):
         pass
 
-    def decorator(func: typing.Callable[_P, _R]) -> typing.Callable[_P, _R]:
-        def _wrapper(new_param: str, *args: _P.args, **kwargs: _P.kwargs) -> _R:
+    def decorator(func: typing.Callable[P, R]) -> typing.Callable[P, R]:
+        def _wrapper(new_param: str, *args: P.args, **kwargs: P.kwargs) -> R:
             return func(*args, **kwargs)
 
         return functools.wraps(func)(_wrapper)

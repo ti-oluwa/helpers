@@ -1,7 +1,25 @@
 import random
+import typing
 
 
-def random_colors(distinct: bool = True):
+def _random_color():
+    while True:
+        yield "#{:06x}".format(random.randint(0, 0xFFFFFF))
+
+
+def _distinct_color():
+    used_colors = set()
+    while True:
+        hue = random.randint(0, 360)
+        saturation = random.randint(50, 100)
+        lightness = random.randint(40, 70)
+        color = f"hsl({hue}, {saturation}%, {lightness}%)"
+        if color not in used_colors:
+            used_colors.add(color)
+            yield color
+
+
+def random_colors(distinct: bool = True) -> typing.Generator[str, None, None]:
     """
     Generates an indefinite sequence of random colors.
 
@@ -21,23 +39,6 @@ def random_colors(distinct: bool = True):
     next(colors)  # '#b2a1c5'
     ```
     """
-
-    def random_color():
-        while True:
-            yield "#{:06x}".format(random.randint(0, 0xFFFFFF))
-
-    def distinct_color():
-        used_colors = set()
-        while True:
-            hue = random.randint(0, 360)
-            saturation = random.randint(50, 100)
-            lightness = random.randint(40, 70)
-            color = f"hsl({hue}, {saturation}%, {lightness}%)"
-            if color not in used_colors:
-                used_colors.add(color)
-                yield color
-
-    if distinct:
-        yield from distinct_color()
-    else:
-        yield from random_color()
+    if not distinct:
+        yield from _random_color()
+    yield from _distinct_color()

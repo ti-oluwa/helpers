@@ -61,7 +61,7 @@ async def cleanup_tasks_on_exit(
     try:
         yield
     finally:
-        logger.info("Cleaning up active tasks...")
+        logger.debug("Cleaning up active tasks...")
         await _cancel_tasks(tasks)
 
 

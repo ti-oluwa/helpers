@@ -21,11 +21,13 @@ from pathlib import PurePath
 from dataclasses import dataclass
 from contextlib import asynccontextmanager
 import hashlib
+import weakref
 from collections import OrderedDict
 from datetime import datetime, timedelta
 
 from helpers.logging import log_exception
 from .misc import get_memory_size
+
 
 T = typing.TypeVar("T")
 SyncDownloadHandler = typing.Callable[[httpx.Response], T]
@@ -72,10 +74,10 @@ CacheEntry = typing.NamedTuple(
         ("metadata", typing.Dict[str, typing.Any]),
     ],
 )
-Cache = typing.OrderedDict[CacheKey, CacheEntry]
+Cache = weakref.WeakValueDictionary[CacheKey, CacheEntry]
 
 # Global cache storage
-_download_cache: Cache = OrderedDict()
+_download_cache: Cache = weakref.WeakValueDictionary()
 _CACHE_MAXSIZE: float = 1024 * 1024
 _CACHE_MINSIZE: float = 1024
 
@@ -133,7 +135,7 @@ async def cache_value(
         # Delete the older items in the cache
         try:
             async with lock:
-                oldest = cache.popitem(last=True)
+                oldest = cache.popitem()
                 del oldest
         except KeyError:
             return

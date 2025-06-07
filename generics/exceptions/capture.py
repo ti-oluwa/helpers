@@ -19,33 +19,31 @@ from helpers.dependencies import depends_on
 from helpers.logging import log_exception
 from helpers.generics.utils.misc import is_iterable, is_exception_class, is_mapping
 from helpers.generics.typing import Function, CoroutineFunction
-from helpers.generics.utils.caching import lru_cache
 
 # Why this you say? I'm just too lazy to catch exceptions myself. I know. Its overkill.
 
 P = ParamSpec("P")
 R = typing.TypeVar("R")
 
-# Performance optimizations - cached content type checks
-_JSON_CONTENT_TYPE = "application/json"
-_TEXT_PREFIX = "text/"
-_JSON_SUFFIX = "+json"
+JSON_CONTENT_TYPE = "application/json"
+TEXT_PREFIX = "text/"
+JSON_SUFFIX = "+json"
 
 
-@lru_cache(maxsize=128)
+@functools.lru_cache(maxsize=32)
 def is_text_content_type(content_type: str) -> bool:
     """Return True if the content type is a text content type. Otherwise, False."""
     return (
-        content_type.startswith(_TEXT_PREFIX)
-        or content_type == _JSON_CONTENT_TYPE
-        or content_type.endswith(_JSON_SUFFIX)
+        content_type.startswith(TEXT_PREFIX)
+        or content_type == JSON_CONTENT_TYPE
+        or content_type.endswith(JSON_SUFFIX)
     )
 
 
-@lru_cache(maxsize=32)
+@functools.lru_cache(maxsize=32)
 def is_json_content_type(content_type: str) -> bool:
     """Return True if the content type is a JSON content type. Otherwise, False."""
-    return content_type == _JSON_CONTENT_TYPE
+    return content_type == JSON_CONTENT_TYPE
 
 
 class Response(typing.Protocol):
@@ -185,7 +183,7 @@ class ControllerContextDecorator(typing.Generic[ExceptionType, ResponseType]):
         :param args: The positional arguments to pass to the function
         :param kwargs: The keyword arguments to pass to the function
         """
-        from asgiref.sync import sync_to_async
+        from asgiref.sync import sync_to_async  # type: ignore[import]
 
         return await sync_to_async(sync_func, thread_sensitive=True)(*args, **kwargs)
 
@@ -201,7 +199,7 @@ class ControllerContextDecorator(typing.Generic[ExceptionType, ResponseType]):
         :param args: The positional arguments to pass to the function
         :param kwargs: The keyword arguments to pass to the function
         """
-        from asgiref.sync import async_to_sync
+        from asgiref.sync import async_to_sync  # type: ignore[import]
 
         return async_to_sync(async_func)(*args, **kwargs)
 
@@ -319,8 +317,8 @@ def merge_json_content_with_exception_detail(
     return json_content
 
 
-_CAPTURE_ENABLED_ATTR = "__capture_enabled"
-_WRAPPED_CONTROLLER_ATTR = "wrapped_controller"
+CAPTURE_ENABLED_ATTR = "__capture_enabled"
+WRAPPED_CONTROLLER_ATTR = "wrapped_controller"
 
 
 class ExceptionCaptor(ControllerContextDecorator[ExceptionType, ResponseType]):
@@ -490,13 +488,9 @@ class ExceptionCaptor(ControllerContextDecorator[ExceptionType, ResponseType]):
             )
 
         response_kwargs = response_kwargs or {}
-        response_kwargs.setdefault(
-            self.CONTENT_TYPE_KWARG, self.DEFAULT_CONTENT_TYPE
-        )
+        response_kwargs.setdefault(self.CONTENT_TYPE_KWARG, self.DEFAULT_CONTENT_TYPE)
         self.response_kwargs = response_kwargs
-        self.response_formatter = (
-            response_formatter or self.DEFAULT_RESPONSE_FORMATTER
-        )
+        self.response_formatter = response_formatter or self.DEFAULT_RESPONSE_FORMATTER
         self._callback_counter: int = 0
         self.callbacks: typing.List[PrioritizedCallback] = []
         if callback:
@@ -523,7 +517,7 @@ class ExceptionCaptor(ControllerContextDecorator[ExceptionType, ResponseType]):
         return self._callback_counter
 
     def __repr__(self) -> str:
-        return f"{self.__name__}(target={self.target}, code={self.code})"
+        return f"{type(self).__name__}(target={self.target}, code={self.code})"
 
     def __copy__(self) -> Self:
         args = self._init_args
@@ -805,9 +799,9 @@ class ExceptionCaptor(ControllerContextDecorator[ExceptionType, ResponseType]):
         # that means it has already been decorated
         # by the `enable` decorator, and is wrapped.
         # Hence, we decorate the wrapped controller instead
-        if getattr(controller_func, _CAPTURE_ENABLED_ATTR, False):
-            wrapped_controller = getattr(controller_func, _WRAPPED_CONTROLLER_ATTR)
-            setattr(controller_func, _WRAPPED_CONTROLLER_ATTR, self(wrapped_controller))
+        if getattr(controller_func, CAPTURE_ENABLED_ATTR, False):
+            wrapped_controller = getattr(controller_func, WRAPPED_CONTROLLER_ATTR)
+            setattr(controller_func, WRAPPED_CONTROLLER_ATTR, self(wrapped_controller))
             return controller_func
         return super().decorate_controller_func(controller_func)
 
@@ -857,7 +851,7 @@ class ExceptionCaptor(ControllerContextDecorator[ExceptionType, ResponseType]):
             ...
         ```
         """
-        if getattr(controller, _CAPTURE_ENABLED_ATTR, False):
+        if getattr(controller, CAPTURE_ENABLED_ATTR, False):
             return controller
 
         if inspect.isclass(controller):
@@ -875,7 +869,7 @@ class ExceptionCaptor(ControllerContextDecorator[ExceptionType, ResponseType]):
             @functools.wraps(controller)
             async def sync_wrapper(*args: P.args, **kwargs: P.kwargs) -> ResponseType:
                 try:
-                    return await getattr(wrapper, _WRAPPED_CONTROLLER_ATTR)(
+                    return await getattr(wrapper, WRAPPED_CONTROLLER_ATTR)(
                         *args, **kwargs
                     )
                 except cls.ExceptionCaptured as exc:
@@ -887,14 +881,14 @@ class ExceptionCaptor(ControllerContextDecorator[ExceptionType, ResponseType]):
             @functools.wraps(controller)
             def async_wrapper(*args: P.args, **kwargs: P.kwargs) -> ResponseType:
                 try:
-                    return getattr(wrapper, _WRAPPED_CONTROLLER_ATTR)(*args, **kwargs)
+                    return getattr(wrapper, WRAPPED_CONTROLLER_ATTR)(*args, **kwargs)
                 except cls.ExceptionCaptured as exc:
                     return exc.response
 
             wrapper = async_wrapper
 
-        setattr(wrapper, _CAPTURE_ENABLED_ATTR, True)
-        setattr(wrapper, _WRAPPED_CONTROLLER_ATTR, controller)
+        setattr(wrapper, CAPTURE_ENABLED_ATTR, True)
+        setattr(wrapper, WRAPPED_CONTROLLER_ATTR, controller)
         return wrapper
 
 

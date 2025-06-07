@@ -9,7 +9,9 @@ R = typing.TypeVar("R")
 T = typing.TypeVar("T")
 
 
-def batched(i: typing.Union[typing.Iterator[T], typing.Iterable[T]], /, batch_size: int):
+def batched(
+    i: typing.Union[typing.Iterator[T], typing.Iterable[T]], /, batch_size: int
+):
     """
     Create batches of size n from the given iterable.
 
@@ -97,7 +99,10 @@ class _async_batched(typing.AsyncIterator[typing.Sequence[typing.Union[T, R]]]):
 
     @typing.overload
     def _create_batcher(
-        self, async_iter: typing.AsyncIterable[T], batch_size: int, converter: None
+        self,
+        async_iter: typing.AsyncIterable[T],
+        batch_size: int,
+        converter: None,
     ) -> typing.AsyncGenerator[typing.Sequence[T], None]: ...
 
     def _create_batcher(
@@ -108,21 +113,28 @@ class _async_batched(typing.AsyncIterator[typing.Sequence[typing.Union[T, R]]]):
     ) -> typing.AsyncGenerator[typing.Sequence[typing.Union[T, R]], None]:
         """Factory function that creates the appropriate batch generator based on the presence of a converter."""
 
-        async def batch_without_converter() -> (
-            typing.AsyncGenerator[typing.Sequence[T], None]
-        ):
-            batch: typing.Sequence[T] = []
-            async for item in async_iter:
-                batch.append(item)
-                if len(batch) == batch_size:
-                    yield batch
-                    batch = []
-            if batch:
-                yield batch
+        if batch_size <= 0:
+            raise ValueError("batch_size must be a positive integer")
 
-        async def batch_with_converter() -> (
-            typing.AsyncGenerator[typing.Sequence[R], None]
-        ):
+        if not converter:
+
+            async def batch_without_converter() -> typing.AsyncGenerator[
+                typing.Sequence[T], None
+            ]:
+                batch: typing.Sequence[T] = []
+                async for item in async_iter:
+                    batch.append(item)
+                    if len(batch) == batch_size:
+                        yield batch
+                        batch = []
+                if batch:
+                    yield batch
+
+            return batch_without_converter()
+
+        async def batch_with_converter() -> typing.AsyncGenerator[
+            typing.Sequence[R], None
+        ]:
             batch: typing.Sequence[R] = []
             async for item in async_iter:
                 batch.append(await converter(item))  # type: ignore
@@ -132,7 +144,7 @@ class _async_batched(typing.AsyncIterator[typing.Sequence[typing.Union[T, R]]]):
             if batch:
                 yield batch
 
-        return batch_with_converter() if converter else batch_without_converter()
+        return batch_with_converter()
 
     async def aclose(self):
         """Properly close both the generator and async iterable."""
@@ -273,4 +285,3 @@ def suppress_once_yielded(
     if async_iter_func:
         return decorator(async_iter_func)
     return decorator
-

@@ -2,11 +2,7 @@ from helpers.dependencies import deps_required
 
 deps_required({"geopy": "geopy"})
 
-try:
-    from geopy.distance import geodesic, great_circle
-except ImportError:
-    raise ImportError("`geopy` is required to use the `geo` module. ")
-
+from geopy.distance import geodesic, great_circle # type: ignore[import]
 from .choice import ExtendedEnum
 
 

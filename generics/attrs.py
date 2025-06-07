@@ -371,7 +371,7 @@ def type_cast(
 
     Registers structure and unstructure hooks for attrs-based classes on the
     provided cattrs converter instance, casting values to their declared types
-    on structure and unstructure. Raises an error if the class is not an attrs-based class.
+    on structure and unstructure.
 
     :param converter: The cattrs converter instance to register hooks on
     :param cls: The class to register the hooks for (optional, if provided, will register hooks immediately)
