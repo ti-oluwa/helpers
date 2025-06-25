@@ -179,7 +179,14 @@ def split(
     end: typing.Union[datetime.date, datetime.datetime],
     part_factor: datetime.timedelta = datetime.timedelta(days=1),
     parts: typing.Optional[int] = None,
-):
+) -> typing.Generator[
+    typing.Tuple[
+        typing.Union[datetime.date, datetime.datetime],
+        typing.Union[datetime.date, datetime.datetime],
+    ],
+    None,
+    None,
+]:
     """
     Generator.
 
@@ -230,7 +237,7 @@ def split(
         raise ValueError("parts must be a positive integer.")
 
     # Get the range/time difference between the start and end dates/datetimes
-    date_range = end - start # type: ignore
+    date_range = end - start  # type: ignore
     # Calculate the number of possible parts based on the part factor
     possible_parts = date_range // part_factor
     if possible_parts < 1:
@@ -288,7 +295,7 @@ def split(
         # Calculate the upper boundary of the current part
         upper_boundary = lower_boundary + part_factor
 
-        remainder = end - upper_boundary # type: ignore
+        remainder = end - upper_boundary  # type: ignore
         # If the difference between the end date/datetime and the upper boundary is less than the part factor
         if remainder < part_factor:
             remainder_is_a_multiple_of_base_part_factor = (

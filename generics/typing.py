@@ -25,6 +25,7 @@ class SupportsLen(typing.Protocol):
 P = ParamSpec("P")
 R = typing.TypeVar("R")
 
+
 Function = typing.Callable[P, R]
 CoroutineFunction = typing.Callable[P, typing.Awaitable[R]]
 

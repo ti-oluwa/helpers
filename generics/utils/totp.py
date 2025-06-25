@@ -7,7 +7,7 @@ from time import time
 from os import urandom
 
 
-def hotp(key, counter, digits=6):
+def hotp(key: bytes, counter: int, digits: int = 6) -> int:
     """
     Implementation of the HOTP algorithm from `RFC 4226
     <http://tools.ietf.org/html/rfc4226#section-5>`_.
@@ -33,7 +33,7 @@ def hotp(key, counter, digits=6):
     399871
     520489
     """
-    msg = pack(b'>Q', counter)
+    msg = pack(b">Q", counter)
     hs = hmac.new(key, msg, sha1).digest()
     hs = list(iter(hs))
 
@@ -49,7 +49,13 @@ def hotp(key, counter, digits=6):
     return hotp
 
 
-def totp(key, step=30, t0=0, digits=6, drift=0):
+def totp(
+    key: bytes,
+    step: int = 30,
+    t0: int = 0,
+    digits: int = 6,
+    drift: int = 0,
+) -> int:
     """
     Implementation of the TOTP algorithm from `RFC 6238
     <http://tools.ietf.org/html/rfc6238#section-4>`_.
@@ -134,7 +140,14 @@ class TOTP:
     359152
     """
 
-    def __init__(self, key, step=30, t0=0, digits=6, drift=0):
+    def __init__(
+        self,
+        key: bytes,
+        step: int = 30,
+        t0: int = 0,
+        digits: int = 6,
+        drift: int = 0,
+    ) -> None:
         self.key = key
         self.step = step
         self.t0 = t0
@@ -142,16 +155,16 @@ class TOTP:
         self.drift = drift
         self._time = None
 
-    def token(self):
+    def token(self) -> int:
         """The computed TOTP token."""
         return hotp(self.key, self.t(), digits=self.digits)
 
-    def t(self):
+    def t(self) -> int:
         """The computed time step."""
         return ((int(self.time) - self.t0) // self.step) + self.drift
 
     @property
-    def time(self):
+    def time(self) -> float:
         """
         The current time.
 
@@ -164,14 +177,14 @@ class TOTP:
         return self._time if (self._time is not None) else time()
 
     @time.setter
-    def time(self, value):
+    def time(self, value) -> None:
         self._time = value
 
     @time.deleter
-    def time(self):
+    def time(self) -> None:
         self._time = None
 
-    def verify(self, token, tolerance=0, min_t=None):
+    def verify(self, token, tolerance=0, min_t=None) -> bool:
         """
         A high-level verification helper.
 
@@ -204,7 +217,7 @@ class TOTP:
         return verified
 
 
-def random_hex(length=20):
+def random_hex(length=20) -> str:
     """
     Returns a string of random bytes encoded as hex.
 

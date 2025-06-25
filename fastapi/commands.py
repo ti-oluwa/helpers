@@ -8,7 +8,7 @@ deps_required(
 )
 
 import typing
-import click
+import click # type: ignore[import]
 
 
 def make_commands_registry(
@@ -154,7 +154,7 @@ def startserver(
         manage.py startserver --log-level debug\n
         manage.py startserver --ssl-keyfile ./key.pem --ssl-certfile ./cert.pem
     """
-    import uvicorn
+    import uvicorn # type: ignore[import]
 
     config = {
         "app": app,
@@ -167,7 +167,7 @@ def startserver(
         **({"ssl_certfile": ssl_certfile} if ssl_certfile else {}),
     }
 
-    if ctx.obj:
+    if ctx and ctx.obj:
         # Get any additional options passed via command line
         config.update(
             {k.replace("-", "_"): v for k, v in ctx.obj.items() if v is not None}

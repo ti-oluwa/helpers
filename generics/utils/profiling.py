@@ -1,7 +1,7 @@
 import typing
 
 try:
-    from typing import ParamSpec, Self
+    from typing import ParamSpec, Self  # type: ignore[import]
 except ImportError:
     from typing_extensions import ParamSpec, Self
 
@@ -11,11 +11,12 @@ import cProfile
 import pstats
 import io
 
-_P = ParamSpec("_P")
-_R = typing.TypeVar("_R")
+
+P = ParamSpec("P")
+R = typing.TypeVar("R")
 
 
-class _timeit(ContextDecorator):
+class Timer(ContextDecorator):
     """Context manager/decorator to measure the time taken to execute a function or block of code."""
 
     def __init__(
@@ -25,7 +26,7 @@ class _timeit(ContextDecorator):
         use_perf_counter: bool = True,
     ) -> None:
         """
-        Create a new instance of the _timeit class.
+        Create a new instance of the Timer class.
 
         :param identifier: A unique identifier for the function or block.
         :param output: The output/writer function to use. This defaults to `print`.
@@ -50,7 +51,7 @@ class _timeit(ContextDecorator):
             else:
                 self.output(f"Execution took {time_taken} seconds.\n")
 
-    def __call__(self, func: typing.Callable[_P, _R]) -> typing.Callable[_P, _R]:
+    def __call__(self, func: typing.Callable[P, R]) -> typing.Callable[P, R]:
         self.identifier = self.identifier or func.__name__
         return super().__call__(func)
 
@@ -58,29 +59,38 @@ class _timeit(ContextDecorator):
 @typing.overload
 def timeit(
     identifier: str,
-    func: typing.Optional[typing.Callable[_P, _R]] = None,
     *,
     output: typing.Optional[typing.Callable] = None,
     use_perf_counter: bool = True,
-) -> typing.Union[_timeit, typing.Callable[_P, _R]]: ...
+) -> Timer: ...
 
 
 @typing.overload
 def timeit(
-    func: typing.Optional[typing.Callable[_P, _R]] = None,
+    identifier: str,
+    func: typing.Optional[typing.Callable[P, R]] = None,
+    *,
+    output: typing.Optional[typing.Callable] = None,
+    use_perf_counter: bool = True,
+) -> typing.Union[Timer, typing.Callable[P, R]]: ...
+
+
+@typing.overload
+def timeit(
+    func: typing.Optional[typing.Callable[P, R]] = None,
     *,
     identifier: typing.Optional[str] = None,
     output: typing.Optional[typing.Callable] = None,
     use_perf_counter: bool = True,
-) -> typing.Union[_timeit, typing.Callable[_P, _R]]: ...
+) -> typing.Union[Timer, typing.Callable[P, R]]: ...
 
 
 def timeit(  # type: ignore
-    func: typing.Optional[typing.Callable[_P, _R]] = None,
+    func: typing.Optional[typing.Callable[P, R]] = None,
     identifier: typing.Optional[str] = None,
     output: typing.Optional[typing.Callable] = None,
     use_perf_counter: bool = True,
-) -> typing.Union[_timeit, typing.Callable[_P, _R]]:
+) -> typing.Union[Timer, typing.Callable[P, R]]:
     """
     Measure the time taken to execute a function or block of code.
 
@@ -102,7 +112,7 @@ def timeit(  # type: ignore
     ```
     """
     if isinstance(func, str):
-        timer = _timeit(
+        timer = Timer(
             identifier=func,
             output=output,
             use_perf_counter=use_perf_counter,
@@ -111,7 +121,7 @@ def timeit(  # type: ignore
             return timer(identifier)  # type: ignore
         return timer
 
-    timer = _timeit(
+    timer = Timer(
         identifier=identifier,
         output=output,
         use_perf_counter=use_perf_counter,
@@ -237,10 +247,10 @@ def get_stats_data(
     count = 0
     if max_rows:
         count = max_rows
-    elif stats.total_calls > 0:
-        count = stats.total_calls
-    elif stats.total_calls == 0:
-        count = len(stats.stats)
+    elif stats.total_calls > 0:  # type: ignore
+        count = stats.total_calls  # type: ignore
+    elif stats.total_calls == 0:  # type: ignore
+        count = len(stats.stats)  # type: ignore
     if count == 0:
         raise ValueError("No profiling data available.")
 
@@ -259,7 +269,7 @@ def get_stats_data(
     return stats_data
 
 
-class _Profiler(ContextDecorator):
+class Profiler(ContextDecorator):
     """
     Context manager/decorator to profile a function or block of code using cProfile.
     """
@@ -326,7 +336,7 @@ class _Profiler(ContextDecorator):
         self.output(self.identifier, stats_data)
         self.profiler.clear()
 
-    def __call__(self, func: typing.Callable[_P, _R]) -> typing.Callable[_P, _R]:
+    def __call__(self, func: typing.Callable[P, R]) -> typing.Callable[P, R]:
         self.identifier = self.identifier or func.__name__
         return super().__call__(func)
 
@@ -334,19 +344,31 @@ class _Profiler(ContextDecorator):
 @typing.overload
 def profileit(
     identifier: str,
-    func: typing.Optional[typing.Callable[_P, _R]] = None,
     *,
     output: StatOutput = ...,
     timeunit: typing.Optional[float] = None,
     subcalls: bool = False,
     builtins: bool = False,
     max_rows: typing.Optional[int] = None,
-) -> typing.Union[_Profiler, typing.Callable[_P, _R]]: ...
+) -> Profiler: ...
 
 
 @typing.overload
 def profileit(
-    func: typing.Optional[typing.Callable[_P, _R]] = None,
+    identifier: str,
+    func: typing.Optional[typing.Callable[P, R]] = None,
+    *,
+    output: StatOutput = ...,
+    timeunit: typing.Optional[float] = None,
+    subcalls: bool = False,
+    builtins: bool = False,
+    max_rows: typing.Optional[int] = None,
+) -> typing.Union[Profiler, typing.Callable[P, R]]: ...
+
+
+@typing.overload
+def profileit(
+    func: typing.Optional[typing.Callable[P, R]] = None,
     *,
     identifier: typing.Optional[str] = None,
     output: StatOutput = ...,
@@ -354,18 +376,18 @@ def profileit(
     subcalls: bool = False,
     builtins: bool = False,
     max_rows: typing.Optional[int] = None,
-) -> typing.Union[_Profiler, typing.Callable[_P, _R]]: ...
+) -> typing.Union[Profiler, typing.Callable[P, R]]: ...
 
 
 def profileit(  # type: ignore
-    func: typing.Optional[typing.Callable[_P, _R]] = None,
+    func: typing.Optional[typing.Callable[P, R]] = None,
     identifier: typing.Optional[str] = None,
     output: StatOutput = "simple",
     timeunit: typing.Optional[float] = None,
     subcalls: bool = False,
     builtins: bool = False,
     max_rows: typing.Optional[int] = None,
-) -> typing.Union[_Profiler, typing.Callable[_P, _R]]:
+) -> typing.Union[Profiler, typing.Callable[P, R]]:
     """
     Profile a function or block of code. Can be used as a decorator or context manager,
     similar to 'timeit'.
@@ -391,7 +413,7 @@ def profileit(  # type: ignore
     ```
     """
     if isinstance(func, str):
-        profiler = _Profiler(
+        profiler = Profiler(
             identifier=func,
             output=output,
             timeunit=timeunit,
@@ -403,7 +425,7 @@ def profileit(  # type: ignore
             return profiler(identifier)  # type: ignore
         return profiler
 
-    profiler = _Profiler(
+    profiler = Profiler(
         identifier=identifier,
         output=output,
         timeunit=timeunit,

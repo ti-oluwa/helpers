@@ -18,9 +18,11 @@ BaseManager = TypeVar("BaseManager", bound=models.manager.BaseManager)
 class SearchableQuerySet(models.QuerySet[M]):
     """A model queryset that supports search"""
 
-    model: M
+    model: Type[M]
 
-    def search(self, query: Union[str, Any], fields: Union[List[str], str]):
+    def search(
+        self, query: Union[str, Any], fields: Optional[Union[List[str], str]] = None
+    ):
         """
         Search the queryset for the given query in the given fields.
 
@@ -47,8 +49,10 @@ class SearchableQuerySet(models.QuerySet[M]):
 SQS = TypeVar("SQS", bound=SearchableQuerySet)
 
 
-class BaseSearchableManager(Generic[SQS], models.manager.BaseManager):
+class BaseSearchableManager(models.manager.BaseManager, Generic[SQS]):
     """Base model manager that supports search"""
+
+    _queryset_class = SearchableQuerySet
 
     def __init__(self) -> None:
         super().__init__()
@@ -58,7 +62,7 @@ class BaseSearchableManager(Generic[SQS], models.manager.BaseManager):
             )
 
     def get_queryset(self) -> SQS:
-        return super().get_queryset()
+        return super().get_queryset() # type: ignore[return-value]
 
     def search(
         self, query: Union[str, Any], fields: Optional[Union[List[str], str]] = None
@@ -73,7 +77,7 @@ class BaseSearchableManager(Generic[SQS], models.manager.BaseManager):
         return self.get_queryset().search(query=query, fields=fields)
 
 
-class EagerFetchMethod(enum.StrEnum):
+class EagerFetchMethod(enum.Enum):
     """Enumeration of eager fetch methods"""
 
     SELECT_RELATED = "select_related"

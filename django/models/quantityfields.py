@@ -44,7 +44,7 @@ def validate_quantity(value: typing.Any) -> None:
                 )
         elif isinstance(value, str):
             magnitude, unit = value.split(" ", maxsplit=1)
-            Quantity(magnitude, unit)
+            Quantity(magnitude, unit) # type: ignore
         else:
             raise ValueError("Unsupported value type")
 
@@ -77,7 +77,7 @@ def to_python(value: typing.Any):
             quantity = Quantity(value["magnitude"], value["unit"])
         elif isinstance(value, str):
             magnitude, unit = value.split(" ", maxsplit=1)
-            quantity = Quantity(magnitude, unit)
+            quantity = Quantity(magnitude, unit) # type: ignore
         else:
             raise ValueError("Unsupported value type")
     except SyntaxError:
@@ -122,7 +122,7 @@ class QuantityField(models.CharField):
     def __init__(self, *args, **kwargs) -> None:
         kwargs.setdefault("max_length", 100)
         if kwargs.get("unique", False):
-            warnings.warn(f"{self.__name__} does not support unique=True.")
+            warnings.warn(f"{type(self).__name__} does not support unique=True.")
 
         kwargs["unique"] = False
         super().__init__(*args, **kwargs)

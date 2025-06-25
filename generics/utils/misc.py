@@ -92,9 +92,9 @@ def is_iterable(
     return is_iterable_type(type(obj), exclude=exclude)
 
 
-def is_generic_type(tp: typing.Any) -> bool:
-    """Check if a type is a generic type like List[str], Dict[str, int], etc."""
-    return hasattr(tp, "__origin__")
+def is_generic_type(o: typing.Any, /) -> bool:
+    """Check if an object is a generic type."""
+    return typing.get_origin(o) is not None and not isinstance(o, typing._SpecialForm)
 
 
 def is_exception_class(exc) -> typing.TypeGuard[typing.Type[BaseException]]:
@@ -134,19 +134,23 @@ def bytes_is_base64(b: bytes) -> bool:
 
 
 def get_value_by_traversal_path(
-    data: typing.Dict[str, typing.Any], path: str, delimiter: str = "."
+    data: typing.Mapping[str, typing.Any], path: str, delimiter: str = "."
 ) -> typing.Union[typing.Any, None]:
     """
-    Get the value from a nested dictionary using a traversal path.
+    Get the value from a nested mapping using a traversal path.
 
-    :param data: The dictionary to traverse.
+    :param data: The mapping to traverse.
     :param path: The traversal path to the value.
     :param delimiter: The delimiter used in the traversal path.
     :return: The value at the end of the traversal path.
+        Returns None if the path does not exist in the mapping or
+        a non-mapping value is encountered before the end of the path.
     """
     parts = path.split(delimiter)
     value = data
     for key in parts:
+        if not isinstance(value, collections.abc.Mapping):
+            return None
         value = value.get(key, None)
         if value is None:
             return None
@@ -173,16 +177,23 @@ def get_attr_by_traversal_path(
     return value
 
 
-def get_dict_diff(dict1: typing.Dict, dict2: typing.Dict) -> typing.Dict:
+def get_mapping_diff(
+    dict1: typing.Mapping[typing.Any, typing.Any],
+    dict2: typing.Mapping[typing.Any, typing.Any],
+) -> typing.Dict[typing.Any, typing.Any]:
     """
-    Get the changes between two dictionaries
+    Get the changes between two mappings.
 
-    The changes in the values of the dictionaries are returned as a new dictionary
+    Compares two mappings and returns a new dictionary containing the keys
+    and values that are different between the two mappings.
+
+    If a key exists in both mappings and its value is a mapping, it will
+    recursively compare the nested mappings and include the differences.
     """
     diff_dict = {}
     for key, value in dict1.items():
-        if isinstance(value, dict):
-            diff = get_dict_diff(value, dict2.get(key, {}))
+        if isinstance(value, collections.abc.Mapping):
+            diff = get_mapping_diff(value, dict2.get(key, {}))
             if diff:
                 diff_dict[key] = diff
             continue
@@ -194,15 +205,21 @@ def get_dict_diff(dict1: typing.Dict, dict2: typing.Dict) -> typing.Dict:
     return diff_dict
 
 
-_Mapping = typing.TypeVar("_Mapping", bound=collections.abc.MutableMapping)
+MutableMappingT = typing.TypeVar(
+    "MutableMappingT", bound=collections.abc.MutableMapping[typing.Any, typing.Any]
+)
 
 
 def merge_mappings(
-    *mappings: _Mapping,
+    *mappings: MutableMappingT,
     merge_nested: bool = True,
-    merger: typing.Optional[typing.Callable[[_Mapping, _Mapping], _Mapping]] = None,
-    copier: typing.Optional[typing.Callable[[_Mapping], _Mapping]] = copy.copy,
-) -> _Mapping:
+    merger: typing.Optional[
+        typing.Callable[[MutableMappingT, MutableMappingT], MutableMappingT]
+    ] = None,
+    copier: typing.Optional[
+        typing.Callable[[MutableMappingT], MutableMappingT]
+    ] = copy.copy,
+) -> MutableMappingT:
     """
     Merges two or more mappings into a single mapping.
     Starting from the right to left, each mapping is merged into the penultimate mapping.
@@ -289,7 +306,7 @@ _default_mappings_merger = functools.partial(merge_mappings, copier=None)
 
 # Deprecated: Use `merge_mappings` instead.
 def merge_dicts(
-    *dicts: typing.Dict,
+    *dicts: typing.Dict[typing.Any, typing.Any],
     **kwargs,
 ):
     """
@@ -395,7 +412,7 @@ __all__ = [
     "merge_dicts",
     "merge_mappings",
     "merge_enums",
-    "get_dict_diff",
+    "get_mapping_diff",
     "underscore_dict_keys",
     "python_type_to_html_input_type",
 ]
