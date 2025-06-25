@@ -5,14 +5,14 @@ import json
 from asgiref.sync import sync_to_async
 import asyncio
 
-from . import _HTTPResponse
+from . import HTTPResponseTco
 from ..views import CBV, FBV
 from .shortcuts import Status as ResponseStatus
 
-Formatter = Callable[[_HTTPResponse], _HTTPResponse]
+Formatter = Callable[[HTTPResponseTco], HTTPResponseTco]
 
 
-def _transfer_response_props(original: _HTTPResponse, new: _HTTPResponse) -> _HTTPResponse:
+def _transfer_response_props(original: HTTPResponseTco, new: HTTPResponseTco) -> HTTPResponseTco:
     """
     Updates the new response with attributes from the original response
     that are not already present.
@@ -36,7 +36,7 @@ def enforce_format(formatter: Formatter):
         if asyncio.iscoroutinefunction(view_func):
 
             @functools.wraps(view_func)
-            async def wrapper(*args, **kwargs) -> _HTTPResponse:
+            async def wrapper(*args, **kwargs) -> HTTPResponseTco:
                 response = await view_func(*args, **kwargs)
                 formatted_response = formatter(response)
                 async_transfer_props = sync_to_async(_transfer_response_props)
@@ -44,7 +44,7 @@ def enforce_format(formatter: Formatter):
         else:
 
             @functools.wraps(view_func)
-            def wrapper(*args, **kwargs) -> _HTTPResponse:
+            def wrapper(*args, **kwargs) -> HTTPResponseTco:
                 response = view_func(*args, **kwargs)
                 formatted_response = formatter(response)
                 return _transfer_response_props(response, formatted_response)
@@ -242,7 +242,7 @@ def generic_response_data_formatter(
     return formatted
 
 
-def json_httpresponse_formatter(response: _HTTPResponse) -> _HTTPResponse:
+def json_httpresponse_formatter(response: HTTPResponseTco) -> HTTPResponseTco:
     """
     Formats JSON serializable response data into a structured format.
 
@@ -267,7 +267,7 @@ def json_httpresponse_formatter(response: _HTTPResponse) -> _HTTPResponse:
     return HttpResponse(content, status=status_code, content_type="application/json")
 
 
-def drf_response_formatter(response: _HTTPResponse) -> _HTTPResponse:
+def drf_response_formatter(response: HTTPResponseTco) -> HTTPResponseTco:
     """
     Formats a Django Rest Framework response data into a structured format.
 

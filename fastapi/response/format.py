@@ -3,7 +3,7 @@ import copy
 import orjson
 from starlette.responses import Response, StreamingResponse
 
-from . import _Response
+from . import ResponseTco
 from .shortcuts import Status as ResponseStatus, Schema as ResponseSchema
 
 Formatter = typing.Callable[
@@ -220,7 +220,7 @@ def is_streaming_response(response: Response) -> bool:
     return isinstance(response, StreamingResponse)
 
 
-async def json_httpresponse_formatter(response: _Response) -> _Response:
+async def json_httpresponse_formatter(response: ResponseTco) -> ResponseTco:
     """
     Formats JSON serializable response data into a structured format.
 

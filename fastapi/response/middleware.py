@@ -2,67 +2,60 @@ import typing
 import asyncio
 import importlib
 import re
-import functools
-from collections.abc import Mapping
 from starlette.types import ASGIApp, Receive, Scope, Send, Message
 from starlette.requests import HTTPConnection, empty_send
 from starlette.responses import Response
-from starlette.datastructures import MutableHeaders
+from starlette.datastructures import MutableHeaders, Headers
 from starlette.concurrency import run_in_threadpool
 
-from helpers.fastapi.config import settings
 from .format import json_httpresponse_formatter, Formatter
 from helpers.logging import log_exception
 
 
 class FormatJSONResponseMiddleware:
     """
-    Middleware to format JSON response data to a structured and consistent format (as defined by formatter).
-
-    In settings.py:
-
-    ```python
-    RESPONSE_FORMATTER = {
-        "formatter": "path.to.formatter_function", # Default formatter is used if not set
-        "exclude": [r"^(?!/api).*$", ...] # Routes to exclude from formatting
-    }
-    ```
+    ASGI Middleware to format JSON response data to a structured and consistent format (as defined by formatter).
     """
 
     default_formatter: Formatter = json_httpresponse_formatter
     """The default response formatter."""
-    setting_name = "RESPONSE_FORMATTER"
-    """The name of the setting for the middleware in the helpers settings."""
 
-    def __init__(self, app: ASGIApp):
+    def __init__(
+        self,
+        app: ASGIApp,
+        format: bool = True,
+        excluded_paths: typing.Optional[typing.List[str]] = None,
+        formatter: typing.Union[Formatter, str] = "default",
+    ) -> None:
+        """
+        Initialize the middleware.
+
+        :param app: The ASGI application.
+        :param format: Whether to format the response or not.
+        :param excluded_paths: List of paths to exclude from formatting.
+        :param formatter: The response formatter, can be a callable or an import path.
+        """
         self.app = app
-        self.formatter = self.get_formatter()
-        self.excluded_paths_patterns = [
-            re.compile(path) for path in self.settings.get("exclude", [])
-        ]
-        self.enforce_format = self.settings.get("enforce_format", True) is True
+        self.formatter = (
+            formatter if callable(formatter) else self._load_formatter(formatter)
+        )
+        self.excluded_paths_patterns = (
+            tuple(re.compile(path) for path in excluded_paths)
+            if excluded_paths
+            else None
+        )
+        self._format = format
 
-    @functools.cached_property
-    def settings(cls) -> Mapping[str, typing.Any]:
-        middleware_settings = settings.get(cls.setting_name, {})
-        if not isinstance(middleware_settings, Mapping):
-            raise TypeError(
-                f"settings.{cls.setting_name} should be a mapping not {type(middleware_settings).__name__}"
-            )
-        return middleware_settings
+    @classmethod
+    def _load_formatter(cls, formatter: str) -> Formatter:
+        """Load the response formatter."""
+        if formatter.lower() == "default":
+            return cls.default_formatter
 
-    def get_formatter(self) -> Formatter:
-        """Return the response formatter."""
-        formatter_path: str = self.settings.get("formatter", "default")
-
-        if formatter_path.lower() == "default":
-            formatter = self.default_formatter
-        else:
-            formatter = importlib.import_module(formatter_path)
-            if not callable(formatter):
-                raise TypeError("Response formatter must be a callable")
-
-        return formatter
+        imported_formatter = importlib.import_module(formatter)
+        if not callable(imported_formatter):
+            raise TypeError("Response formatter must be a callable")
+        return imported_formatter
 
     def is_json_response(self, response: Response) -> bool:
         """
@@ -71,35 +64,25 @@ class FormatJSONResponseMiddleware:
         :param response: The response object.
         :return: True if the response is a JSON response, False otherwise.
         """
-        return response.headers.get("Content-Type", "").startswith("application/json")
+        return "application/json" in response.headers.get("Content-Type", "")
 
-    async def can_format(self, connection: HTTPConnection, response: Response) -> bool:
+    async def can_format(self, response: Response) -> bool:
         """
         Check if the response can be formatted.
 
-        :param connection: The connection object.
         :param response: The response object.
         :return: True if the response can be formatted, False otherwise.
         """
-        if self.enforce_format is False or not self.is_json_response(response):
-            return False
+        return not self._format or not self.is_json_response(response)
 
-        request_path = "/" + connection.url.path.lstrip("/")
-        for excluded_path_pattern in self.excluded_paths_patterns:
-            if excluded_path_pattern.match(request_path):
-                return False
-        return True
-
-    async def format(self, connection: HTTPConnection, response: Response) -> Response:
+    async def format(self, response: Response) -> Response:
         """
         Format the response.
 
-        :param connection: The connection object.
         :param response: The response object.
         :return: The formatted response object.
         """
-        can_format = await self.can_format(connection, response)
-        if not can_format:
+        if not await self.can_format(response):
             return response
 
         try:
@@ -111,22 +94,6 @@ class FormatJSONResponseMiddleware:
             log_exception(exc)
             return response
 
-    async def pre_format(
-        self, connection: HTTPConnection, response: Response
-    ) -> Response:
-        """
-        Should contain logic to be executed before formatting the response.
-        """
-        return response
-
-    async def post_format(
-        self, connection: HTTPConnection, formatted_response: Response
-    ) -> Response:
-        """
-        Should contain logic to be executed after formatting the response.
-        """
-        return formatted_response
-
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         """Process the connection."""
         if scope["type"] != "http":
@@ -134,14 +101,14 @@ class FormatJSONResponseMiddleware:
             return
 
         connection = HTTPConnection(scope, receive)
+        if self.excluded_paths_patterns:
+            request_path = "/" + connection.url.path.lstrip("/")
+            for excluded_path in self.excluded_paths_patterns:
+                if excluded_path.match(request_path):
+                    await self.app(scope, receive, send)
+                    return
 
-        async def formatter(response: Response) -> Response:
-            nonlocal connection
-            pre_formatted_response = await self.pre_format(connection, response)
-            formatted_response = await self.format(connection, pre_formatted_response)
-            return await self.post_format(connection, formatted_response)
-
-        responder = FormatResponder(app=self.app, formatter=formatter)
+        responder = FormatResponder(app=self.app, formatter=self.format)
         await responder(scope, receive, send)
 
 
@@ -158,6 +125,8 @@ async def decode_headers(
 
 
 class FormatResponder:
+    """Formats the response (if necessary) before sending it to the client."""
+
     def __init__(
         self,
         app: ASGIApp,
@@ -167,70 +136,93 @@ class FormatResponder:
         self.formatter = formatter
         self.send = empty_send
         self.response_started = False
-        self.response_start_message = {}
-        self.content_encoding_set = False
+        self.initial_message = {}
+        self.has_content_encoding = False
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         self.send = send
         await self.app(scope, receive, self.send_formatted)
 
     async def send_formatted(self, message: Message) -> None:
-        # Delay sending the response event to the client until
-        # the response is complete so that we can format the
-        # response after which we can then send the response
-        # event to the client in correct sequence.
         message_type = message["type"]
-        if message_type == "http.response.start":
-            self.response_start_message = message
-            self.content_encoding_set = (
-                "content-encoding" in self.response_start_message["headers"]
-            )
 
-        elif message_type == "http.response.body" and self.content_encoding_set:
+        if message_type == "http.response.start":
+            self.initial_message = message
+            # Check if response has content-encoding (compressed content)
+            headers = Headers(raw=message["headers"])
+            self.has_content_encoding = "content-encoding" in headers
+
+        elif message_type == "http.response.body" and self.has_content_encoding:
+            # If content-encoding is set, we assume the response is already formatted
+            # Just send the initial message and the body as is
             if not self.response_started:
                 self.response_started = True
-                await self.send(self.response_start_message)
+                await self.send(self.initial_message)
             await self.send(message)
 
         elif message_type == "http.response.body" and not self.response_started:
-            body = message.get("body", b"")
-            more_body: bool = message.get("more_body", False)
-            headers = MutableHeaders(raw=self.response_start_message["headers"])
-            status_code = self.response_start_message["status"]
-            response = Response(
-                status_code=status_code,
-                headers=headers,
-                content=body,
-            )
-            response = await self.formatter(response)
             self.response_started = True
-            await self.send(
-                {
-                    "type": "http.response.start",
-                    "status": status_code,
-                    "headers": response.headers.raw,
-                }
-            )
-            await self.send(
-                {
-                    "type": "http.response.body",
-                    "body": body,
-                    "more_body": more_body,
-                }
-            )
-        elif message_type == "http.response.body":
             body = message.get("body", b"")
-            if not body:
-                await self.send(message)
-                return
+            more_body = message.get("more_body", False)
+            headers = MutableHeaders(raw=self.initial_message["headers"])
+            status_code = self.initial_message["status"]
 
-            headers = MutableHeaders(raw=self.response_start_message["headers"])
-            status_code = self.response_start_message["status"]
+            if not more_body:
+                # Format the response if it is not streaming
+                response = Response(
+                    content=body,
+                    status_code=status_code,
+                    headers=headers,
+                )
+                formatted_response = await self.formatter(response)
+                # Update the body with the formatted response body
+                message["body"] = formatted_response.body
+
+                # Send the initial message with formatted headers
+                initial_message = dict(self.initial_message)
+                initial_message["headers"] = formatted_response.headers.raw
+                await self.send(initial_message)
+
+                # Send the message with the formatted body
+                await self.send(message)
+
+            else:
+                # If more_body is True, we assume the response is streaming
+                response = Response(
+                    content=body,
+                    status_code=status_code,
+                    headers=headers,
+                )
+                formatted_response = await self.formatter(response)
+                # Update the body with the formatted response body
+                message["body"] = formatted_response.body
+
+                # Send the initial message with formatted headers
+                initial_message = dict(self.initial_message)
+                # Delete content length for streaming response
+                del formatted_response.headers["content-length"]
+                initial_message["headers"] = formatted_response.headers.raw
+                await self.send(initial_message)
+
+                # Send the message with the formatted body
+                await self.send(message)
+
+        elif message_type == "http.response.body":
+            # If the response is already started, just format the response and send it
+            body = message.get("body", b"")
+            more_body = message.get("more_body", False)
+            status_code = self.initial_message["status"]
+            headers = MutableHeaders(raw=self.initial_message["headers"])
+
             response = Response(
+                content=body,
                 status_code=status_code,
                 headers=headers,
-                content=body,
             )
-            response = await self.formatter(response)
-            message["body"] = response.body
+            formatted_response = await self.formatter(response)
+            message["body"] = formatted_response.body
+            await self.send(message)
+
+        # If the message type is not recognized, just send it as is
+        else:
             await self.send(message)

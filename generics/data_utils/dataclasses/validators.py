@@ -3,9 +3,10 @@ import typing
 import operator
 import re
 
-from helpers.generics.typing import SupportsRichComparison, SupportsLen
+from helpers.generics.typing import SupportsRichComparison
 from .exceptions import FieldValidationError
 
+typing.Sized
 
 _Validator: typing.TypeAlias = typing.Callable[
     [
@@ -18,7 +19,7 @@ _Validator: typing.TypeAlias = typing.Callable[
 
 Bound = SupportsRichComparison
 ComparableValue = SupportsRichComparison
-CountableValue = SupportsLen
+CountableValue = typing.Sized
 
 
 class FieldValidator(typing.NamedTuple):

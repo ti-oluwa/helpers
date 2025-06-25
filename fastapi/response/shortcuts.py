@@ -50,12 +50,15 @@ class Schema(BaseModel, typing.Generic[T, E]):
     )
     message: str = Field(..., description="A short message describing the response.")
     detail: typing.Optional[str] = Field(
+        default=None,
         description="typing.Optional detailed information about the response."
     )
     data: typing.Optional[T] = Field(
+        default=None,
         description="typing.Optional data payload for the response."
     )
     errors: typing.Optional[E] = Field(
+        default=None,
         description="typing.Optional error details, if applicable."
     )
 

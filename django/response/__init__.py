@@ -3,5 +3,5 @@ from typing import TypeVar
 
 from .shortcuts import * # noqa
 
-_HTTPResponse = TypeVar("_HTTPResponse", bound=HttpResponse)
-_JSONResponse = TypeVar("_JSONResponse", bound=JsonResponse)
+HTTPResponseTco = TypeVar("HTTPResponseTco", bound=HttpResponse, covariant=True)
+JSONResponseTco = TypeVar("JSONResponseTco", bound=JsonResponse, covariant=True)
