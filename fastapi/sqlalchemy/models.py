@@ -25,10 +25,10 @@ class ModelBase:
         )
 
 
-_Model = typing.TypeVar("_Model", bound=ModelBase)
+ModelTco = typing.TypeVar("ModelTco", bound=ModelBase, covariant=True)
 
 
-def get_app_name(model: typing.Type[_Model]) -> typing.Optional[str]:
+def get_app_name(model: typing.Type[ModelTco]) -> typing.Optional[str]:
     """
     Get the name of the app in which the model is defined.
 
@@ -57,7 +57,7 @@ def get_app_name(model: typing.Type[_Model]) -> typing.Optional[str]:
     return getattr(apps_module, "app_name", parent_name).rsplit(".", maxsplit=1)[-1]
 
 
-def _auto_tablename(model: typing.Type[_Model]) -> typing.Type[_Model]:
+def _auto_tablename(model: typing.Type[ModelTco]) -> typing.Type[ModelTco]:
     """Add a declarative attribute to auto-generate the table name for the model"""
     # Check if the class is mapped or already has a __tablename__
     # This is to avoid the warning thrown when hasattr(model, "__tablename__")
@@ -65,8 +65,8 @@ def _auto_tablename(model: typing.Type[_Model]) -> typing.Type[_Model]:
     if sa.inspect(model, raiseerr=False) is not None:
         return model
 
-    @orm.declared_attr # type: ignore
-    def _tablename(model: typing.Type[_Model]) -> str:
+    @orm.declared_attr  # type: ignore
+    def _tablename(model: typing.Type[ModelTco]) -> str:
         app_name = get_app_name(model)
         model_name = inflection.tableize(model.__name__)
 
@@ -83,9 +83,10 @@ class ModelBaseMeta(orm.DeclarativeMeta):
 
     def __new__(cls, *args, **kwargs) -> typing.Type[ModelBase]:
         new_cls = super().__new__(cls, *args, **kwargs)
-        auto_tablename = bool(getattr(new_cls, "__auto_tablename__", None))
+        auto_tablename = getattr(new_cls, "__auto_tablename__", False)
         tablename = getattr(new_cls, "__tablename__", None)
 
+        new_cls = typing.cast(typing.Type[ModelBase], new_cls)
         if auto_tablename:
             if tablename is not None:
                 raise ValueError(
@@ -98,7 +99,7 @@ class ModelBaseMeta(orm.DeclarativeMeta):
 
     def __iter__(cls):
         if hasattr(cls, "__mapper__"):
-            values = cls.__mapper__.columns # type: ignore
+            values = cls.__mapper__.columns  # type: ignore
         else:
             values = vars(cls)
 
@@ -120,10 +121,14 @@ class Model(ModelBase, metaclass=ModelBaseMeta):
 
     By default;
     ```python
-    __tablename__ = "<app_name>__<model_name_plural>"
+
+    class <ModelName>(Model):
+        __tablename__ = "<app_name>__<model_name_plural>"
     ```
     """
 
+    __tablename__: str  # Just a placeholder for the type checker
+    """The name of the table in the database"""
     __abstract__: bool = True
     __auto_tablename__: bool = False
     """

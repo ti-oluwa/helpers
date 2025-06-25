@@ -18,10 +18,6 @@ class SupportsKeysAndGetItem(typing.Protocol):
     def keys(self) -> typing.Iterable[typing.Any]: ...
 
 
-class SupportsLen(typing.Protocol):
-    def __len__(self) -> int: ...
-
-
 P = ParamSpec("P")
 R = typing.TypeVar("R")
 
@@ -33,5 +29,6 @@ CoroutineFunction = typing.Callable[P, typing.Awaitable[R]]
 @dataclass
 class _Dataclass:
     pass
+
 
 DataclassType = type(_Dataclass)

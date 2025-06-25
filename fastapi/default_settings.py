@@ -24,7 +24,6 @@ MIDDLEWARE: typing.Sequence[
     "helpers.fastapi.middleware.core.HostBlacklistMiddleware",
     "helpers.fastapi.middleware.core.IPBlacklistMiddleware",
     "helpers.fastapi.middleware.users.ConnectedUserMiddleware",
-    "helpers.fastapi.response.middleware.FormatJSONResponseMiddleware",
 ]
 
 PASSWORD_SCHEMES: typing.Sequence[str] = ["md5_crypt"]
@@ -45,12 +44,6 @@ BLACKLISTED_HOSTS: typing.Sequence[str] = []
 BLACKLISTED_IPS: typing.Sequence[str] = []
 
 MAILING: typing.Dict[str, typing.Any] = {}
-
-RESPONSE_FORMATTER: typing.Dict[str, typing.Any] = {
-    "formatter": "default",
-    "exclude": [r"/redoc*", r"/docs*", r"/openapi\.json"],
-    "enforce_format": True,
-}
 
 MAINTENANCE_MODE: typing.Dict[str, typing.Any] = {
     "status": "off",

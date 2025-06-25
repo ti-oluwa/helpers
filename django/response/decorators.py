@@ -7,7 +7,7 @@ import asyncio
 from asgiref.sync import sync_to_async
 
 from helpers.logging import log_exception
-from . import _HTTPResponse
+from . import HTTPResponseTco
 from ..views import is_view_class, CBV, FBV
 
 
@@ -37,7 +37,7 @@ def notify_user(
         raise ValueError("A notification function must be callable")
 
     def decorator(view_func: FBV) -> FBV:
-        def handle_notification(request: HttpRequest, response: _HTTPResponse) -> None:
+        def handle_notification(request: HttpRequest, response: HTTPResponseTco) -> None:
             nonlocal subject
             nonlocal body
             subject = subject or f"Request to {request.path}"
@@ -61,7 +61,7 @@ def notify_user(
 
             async def wrapper(
                 view, request: HttpRequest, *args: str, **kwargs: Any
-            ) -> _HTTPResponse:
+            ) -> HTTPResponseTco:
                 response = await view_func(view, request, *args, **kwargs)
                 await sync_to_async(handle_notification)(request, response)
                 return response
@@ -69,7 +69,7 @@ def notify_user(
 
             def wrapper(
                 view, request: HttpRequest, *args: str, **kwargs: Any
-            ) -> _HTTPResponse:
+            ) -> HTTPResponseTco:
                 response = view_func(view, request, *args, **kwargs)
                 handle_notification(request, response)
                 return response
@@ -165,7 +165,7 @@ def map_code(code_map: CodeMap, *, method: str = "dispatch"):
 
         if asyncio.iscoroutinefunction(view):
 
-            async def method_wrapper(*args, **kwargs) -> _HTTPResponse:
+            async def method_wrapper(*args, **kwargs) -> HTTPResponseTco:
                 response = await view(*args, **kwargs)
                 response.status_code = await sync_to_async(_get_replacement_code)(
                     code_map, response.status_code
@@ -173,7 +173,7 @@ def map_code(code_map: CodeMap, *, method: str = "dispatch"):
                 return response
         else:
 
-            def method_wrapper(*args, **kwargs) -> _HTTPResponse:
+            def method_wrapper(*args, **kwargs) -> HTTPResponseTco:
                 response = view(*args, **kwargs)
                 response.status_code = _get_replacement_code(
                     code_map, response.status_code
@@ -232,7 +232,7 @@ def to_JsonResponse(view_func: FBV) -> FBV:
     if asyncio.iscoroutinefunction(view_func):
 
         async def wrapper(request: HttpRequest, *args, **kwargs) -> JsonResponse:
-            response: _HTTPResponse = await view_func(request, *args, **kwargs)
+            response: HTTPResponseTco = await view_func(request, *args, **kwargs)
 
             if (
                 isinstance(response, JsonResponse)

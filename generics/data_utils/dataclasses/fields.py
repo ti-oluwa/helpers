@@ -903,10 +903,10 @@ class UUIDField(Field[uuid.UUID]):
         super().__init__(field_type=uuid.UUID, **kwargs)
 
 
-IterType = typing.TypeVar("IterType", bound=typing.Iterable[typing.Any])
+IterT = typing.TypeVar("IterT", bound=typing.Iterable[typing.Any])
 
 
-def _get_adder(field_type: typing.Type[IterType]) -> typing.Callable:
+def _get_adder(field_type: typing.Type[IterT]) -> typing.Callable:
     """
     Get the appropriate adder function for the specified iterable type.
     This function returns the method used to add elements to the iterable type.
@@ -933,10 +933,10 @@ def _get_adder(field_type: typing.Type[IterType]) -> typing.Callable:
 
 
 def iterable_python_serializer(
-    value: IterType,
-    field: "IterableField[IterType, _V]",
+    value: IterT,
+    field: "IterableField[IterT, _V]",
     context: typing.Optional[typing.Dict[str, typing.Any]],
-) -> IterType:
+) -> IterT:
     """
     Serialize an iterable to a list of serialized values.
 
@@ -955,8 +955,8 @@ def iterable_python_serializer(
 
 
 def iterable_json_serializer(
-    value: IterType,
-    field: "IterableField[IterType, _V]",
+    value: IterT,
+    field: "IterableField[IterT, _V]",
     context: typing.Optional[typing.Dict[str, typing.Any]],
 ) -> typing.List[typing.Any]:
     """
@@ -971,9 +971,9 @@ def iterable_json_serializer(
 
 
 def iterable_deserializer(
-    field: "IterableField[IterType, _V]",
+    field: "IterableField[IterT, _V]",
     value: typing.Any,
-) -> IterType:
+) -> IterT:
     """
     Deserialize an iterable value to the specified field type.
 
@@ -983,7 +983,7 @@ def iterable_deserializer(
     :return: The deserialized value.
     """
     field_type = field.field_type
-    field_type = typing.cast(typing.Type[IterType], field_type)
+    field_type = typing.cast(typing.Type[IterT], field_type)
     deserialized = field_type.__new__(field_type)  # type: ignore
 
     for item in value:
@@ -993,8 +993,8 @@ def iterable_deserializer(
 
 
 def validate_iterable(
-    value: IterType,
-    field: "IterableField[IterType, _V]",
+    value: IterT,
+    field: "IterableField[IterT, _V]",
     instance: typing.Optional[typing.Any],
 ) -> None:
     """
@@ -1008,7 +1008,7 @@ def validate_iterable(
         field.child.validate(item, instance)
 
 
-class IterableField(typing.Generic[IterType, _V], Field[IterType]):
+class IterableField(typing.Generic[IterT, _V], Field[IterT]):
     """Base class for iterable fields."""
 
     default_serializers = {
@@ -1020,11 +1020,11 @@ class IterableField(typing.Generic[IterType, _V], Field[IterType]):
 
     def __init__(
         self,
-        field_type: typing.Type[IterType],
+        field_type: typing.Type[IterT],
         child: typing.Optional[Field[_V]] = None,
         *,
         size: typing.Optional[int] = None,
-        **kwargs: Unpack[FieldInitKwargs[IterType]],
+        **kwargs: Unpack[FieldInitKwargs[IterT]],
     ):
         """
         Initialize the field.
@@ -1041,7 +1041,7 @@ class IterableField(typing.Generic[IterType, _V], Field[IterType]):
         validators = kwargs.get("validators", [])
         if size is not None:
             validators = typing.cast(
-                typing.Iterable[FieldValidator[IterType]], validators
+                typing.Iterable[FieldValidator[IterT]], validators
             )
             validators = [
                 *validators,
@@ -1059,7 +1059,7 @@ class IterableField(typing.Generic[IterType, _V], Field[IterType]):
                 f"'child' must be a field instance , not {type(self.child).__name__}."
             )
 
-    def check_type(self, value: typing.Any) -> typing.TypeGuard[IterType]:
+    def check_type(self, value: typing.Any) -> typing.TypeGuard[IterT]:
         if not super().check_type(value):
             return False
 

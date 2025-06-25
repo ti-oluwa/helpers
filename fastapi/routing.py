@@ -42,5 +42,5 @@ def install_router(router: fastapi.APIRouter, router_name: str, **kwargs) -> Non
         return app
 
     setup_name = inflection.underscore(f"include_{router_name}")
-    app_setup(_router_setup, setup_name)
+    app_setup(_router_setup, name=setup_name)
     return

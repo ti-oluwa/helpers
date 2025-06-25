@@ -1,26 +1,45 @@
 import typing
+import logging
+from collections import OrderedDict
 import fastapi
+from fastapi.routing import APIRoute
 
 from .middleware.core import apply_middleware
 from .dependencies import Dependency
 from .config import settings
 from helpers.generics.utils.module_loading import import_string
 
+logger = logging.getLogger(__name__)
 
-SetupName: typing.TypeAlias = str
-"""Setup name"""
+
 SetupFunc = typing.Callable[[fastapi.FastAPI], fastapi.FastAPI]
 """Setup function - takes a (FastAPI) application and performs some post initialization setup on it"""
 
-SETUPS: typing.Dict[SetupName, SetupFunc] = {
-    "apply_middleware": apply_middleware,  # default middleware setup
-}
+SETUPS: typing.OrderedDict[str, SetupFunc] = OrderedDict(
+    {
+        "apply_middleware": apply_middleware,  # default middleware setup
+    }
+)
 """Registered application setups"""
 
 
+@typing.overload
+def app_setup(setup: SetupFunc) -> SetupFunc: ...
+
+
+@typing.overload
 def app_setup(
-    setup: typing.Optional[SetupFunc] = None, name: typing.Optional[SetupName] = None
-) -> SetupFunc | typing.Callable[[SetupFunc], SetupFunc]:
+    *, name: typing.Optional[str] = ...
+) -> typing.Callable[[SetupFunc], SetupFunc]: ...
+
+
+@typing.overload
+def app_setup(setup: SetupFunc, *, name: typing.Optional[str] = ...) -> SetupFunc: ...
+
+
+def app_setup(
+    setup: typing.Optional[SetupFunc] = None, *, name: typing.Optional[str] = None
+) -> typing.Union[SetupFunc, typing.Callable[[SetupFunc], SetupFunc]]:
     """
     Installs a new FastAPI application setup function.
 
@@ -72,7 +91,9 @@ def exception_handlers():
             if isinstance(exc, str):
                 exc = import_string(exc)
             else:
-                raise ValueError("Key in 'EXCEPTION_HANDLERS' must be an exception class")
+                raise ValueError(
+                    "Key in 'EXCEPTION_HANDLERS' must be an exception class"
+                )
 
         handler = import_string(handler_path)
         yield exc, handler
@@ -116,8 +137,25 @@ def setup_application(app: fastapi.FastAPI) -> fastapi.FastAPI:
     :param app: FastAPI application instance
     :return: FastAPI application instance
     """
-    for func in SETUPS.values():
+    for name, func in SETUPS.items():
+        logger.debug(f"Applying setup '{name}' to FastAPI application")
         _app = func(app)
         if _app is not None:
             app = _app
+    return app
+
+
+def use_route_names_as_operation_ids(app: fastapi.FastAPI) -> fastapi.FastAPI:
+    """
+    Use route names as operation IDs for all API routes in the FastAPI application.
+
+    Should be called only after all routes have been added.
+
+    :param app: FastAPI application instance
+    :return: FastAPI application instance
+    """
+    for route in app.routes:
+        if isinstance(route, APIRoute) and not route.operation_id:
+            # If the route does not have an operation_id, set it to the route name
+            route.operation_id = route.name
     return app
