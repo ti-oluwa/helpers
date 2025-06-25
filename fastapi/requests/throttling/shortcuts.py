@@ -19,13 +19,13 @@ from helpers.fastapi.utils.sync import sync_to_async
 from helpers.generics.utils.functions import add_parameter_to_signature
 
 
-_P = ParamSpec("_P")
-_Q = ParamSpec("_Q")
-_R = typing.TypeVar("_R")
-_S = typing.TypeVar("_S")
+P = ParamSpec("P")
+Q = ParamSpec("Q")
+R = typing.TypeVar("R")
+S = typing.TypeVar("S")
 
-Decorated = typing.Union[Function[_P, _R], CoroutineFunction[_P, _R]]
-Dependency = typing.Union[Function[_Q, _S], CoroutineFunction[_Q, _S]]
+Decorated = typing.Union[Function[P, R], CoroutineFunction[P, R]]
+Dependency = typing.Union[Function[Q, S], CoroutineFunction[Q, S]]
 _Throttle = typing.TypeVar("_Throttle", bound=BaseThrottle)
 
 
@@ -47,7 +47,7 @@ class ThrottleKwargs(typing.TypedDict, total=False):
 
 
 class DecoratorDepends(
-    typing.Generic[_P, _R, _Q, _S],
+    typing.Generic[P, R, Q, S],
     fastapi.params.Depends,
 ):
     """
@@ -66,25 +66,25 @@ class DecoratorDepends(
     def __init__(
         self,
         dependency_decorator: Function[
-            [Decorated[_P, _R], typing.Optional[Dependency[_Q, _S]]],
-            Decorated[_P, _R],
+            [Decorated[P, R], typing.Optional[Dependency[Q, S]]],
+            Decorated[P, R],
         ],
-        dependency: typing.Optional[Dependency[_Q, _S]] = None,
+        dependency: typing.Optional[Dependency[Q, S]] = None,
         *,
         use_cache: bool = True,
     ) -> None:
         self.dependency_decorator = dependency_decorator
         super().__init__(dependency, use_cache=use_cache)
 
-    def __call__(self, decorated: Decorated[_P, _R]):
+    def __call__(self, decorated: Decorated[P, R]):
         return self.dependency_decorator(decorated, self.dependency)
 
 
 # Is this worth it? Just because of the `throttle` decorator?
 def _wrap_route(
-    route: Decorated[_P, _R],
+    route: Decorated[P, R],
     throttle: BaseThrottle,
-) -> Decorated[_P, _R]:
+) -> Decorated[P, R]:
     """
     Create an wrapper that applies throttling to an route
     by wrapping the route such that the route depends on the throttle.
@@ -108,18 +108,18 @@ def _wrap_route(
         wrapper_code = f"""
 async def route_wrapper(
     {throttle_dep_param_name}: typing.Annotated[typing.Any, fastapi.Depends(throttle)],
-    *args: _P.args,
-    **kwargs: _P.kwargs,
-) -> _R:
+    *args: P.args,
+    **kwargs: P.kwargs,
+) -> R:
     return await route(*args, **kwargs)
 """
     else:
         wrapper_code = f"""
 def route_wrapper(
     {throttle_dep_param_name}: typing.Annotated[typing.Any, fastapi.Depends(throttle)],
-    *args: _P.args,
-    **kwargs: _P.kwargs,
-) -> _R:
+    *args: P.args,
+    **kwargs: P.kwargs,
+) -> R:
     return route(*args, **kwargs)
 """
 
@@ -159,9 +159,9 @@ def route_wrapper(
 
 
 def _throttle_route(
-    route: Decorated[_P, _R],
+    route: Decorated[P, R],
     throttle: BaseThrottle,
-) -> Decorated[_P, _R]:
+) -> Decorated[P, R]:
     """
     Returns wrapper that applies throttling to the given route
     by wrapping the route such that the route depends on the throttle.
@@ -175,28 +175,28 @@ def _throttle_route(
 
 @typing.overload
 def throttle(
-    route: typing.Optional[Decorated[_P, _R]] = None,
+    route: typing.Optional[Decorated[P, R]] = None,
     /,
     *,
     identifier: typing.Optional[ConnectionIdentifier[_HTTPConnection]] = None,
     throttle_type: typing.Type[_Throttle] = HTTPThrottle,
     **throttle_kwargs: Unpack[ThrottleKwargs],
-) -> DecoratorDepends[_P, _R, typing.Any, typing.Any]: ...
+) -> DecoratorDepends[P, R, typing.Any, typing.Any]: ...
 
 
 @typing.overload
 def throttle(
-    route: Decorated[_P, _R],
+    route: Decorated[P, R],
     /,
     *,
     identifier: typing.Optional[ConnectionIdentifier[_HTTPConnection]] = None,
     throttle_type: typing.Type[_Throttle] = HTTPThrottle,
     **throttle_kwargs: Unpack[ThrottleKwargs],
-) -> Decorated[_P, _R]: ...
+) -> Decorated[P, R]: ...
 
 
 def throttle(
-    route: typing.Optional[Decorated[_P, _R]] = None,
+    route: typing.Optional[Decorated[P, R]] = None,
     /,
     *,
     identifier: typing.Optional[ConnectionIdentifier[_HTTPConnection]] = None,
@@ -269,7 +269,7 @@ def throttle(
         identifier = sync_to_async(identifier)
 
     throttle = throttle_type(identifier=identifier, **throttle_kwargs)
-    decorator_dependency = DecoratorDepends[_P, _R, typing.Any, typing.Any](
+    decorator_dependency = DecoratorDepends[P, R, typing.Any, typing.Any](
         dependency_decorator=_throttle_route,  # type: ignore
         dependency=throttle,
     )

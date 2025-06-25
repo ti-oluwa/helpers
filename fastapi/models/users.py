@@ -1,7 +1,6 @@
 import collections
 import collections.abc
 import datetime
-from tkinter import N
 import typing
 from annotated_types import MaxLen
 import sqlalchemy as sa
