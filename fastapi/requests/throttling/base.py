@@ -11,7 +11,7 @@ import fastapi
 from starlette.requests import HTTPConnection
 from starlette.status import HTTP_429_TOO_MANY_REQUESTS
 
-from helpers.generics.typing import Function, CoroutineFunction
+from helpers.types import Function, CoroutineFunction
 from helpers.fastapi.utils.requests import get_ip_address
 
 

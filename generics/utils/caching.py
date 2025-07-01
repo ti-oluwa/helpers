@@ -10,7 +10,7 @@ import asyncio
 from typing_extensions import ParamSpec
 from cachetools import TTLCache, TLRUCache, LRUCache, LFUCache
 
-from helpers.generics.typing import Function, CoroutineFunction
+from helpers.types import Function, CoroutineFunction
 
 
 P = ParamSpec("P")

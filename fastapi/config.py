@@ -5,7 +5,7 @@ import importlib
 from types import ModuleType
 
 from helpers.generics.utils.misc import merge_mappings
-from helpers.generics.types import MappingProxy
+from helpers.types import MappingProxy
 from . import default_settings
 
 

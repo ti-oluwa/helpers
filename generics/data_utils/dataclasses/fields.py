@@ -25,7 +25,7 @@ try:
 except ImportError:
     from backports import zoneinfo  # type: ignore[import]
 
-from helpers.generics.typing import SupportsRichComparison
+from helpers.types import SupportsRichComparison
 from helpers.generics.utils.misc import is_iterable_type, is_iterable
 from helpers.dependencies import depends_on
 from helpers.generics.utils.datetime import iso_parse, parse_duration

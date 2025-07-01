@@ -1,17 +1,13 @@
 import time
 import typing
 import asyncio
-from typing_extensions import ParamSpec
 import functools
 
 from helpers.logging import log_exception
-from helpers.generics.typing import Function, CoroutineFunction
+from helpers.types import Function, CoroutineFunction, LoggerLike, P, R, T
 
 
-P = ParamSpec("P")
-R = typing.TypeVar("R")
-T = typing.TypeVar("T")
-R_co = typing.TypeVar("R_co", covariant=True)
+Rco = typing.TypeVar("Rco", covariant=True)
 BackOffFunction = typing.Callable[[int], float]
 
 
@@ -26,6 +22,7 @@ def retry(  # type: ignore
     ] = None,
     count: int = 1,
     backoff: typing.Optional[typing.Union[BackOffFunction, float]] = None,
+    logger: typing.Optional[LoggerLike] = None,
 ) -> typing.Union[
     typing.Callable[[Function[P, R]], Function[P, R]], Function[P, R]
 ]: ...
@@ -42,6 +39,7 @@ def retry(  # type: ignore
     ] = None,
     count: int = 1,
     backoff: typing.Optional[typing.Union[BackOffFunction, float]] = None,
+    logger: typing.Optional[LoggerLike] = None,
 ) -> typing.Union[
     typing.Callable[[CoroutineFunction[P, R]], CoroutineFunction[P, R]],
     CoroutineFunction[P, R],
@@ -58,6 +56,7 @@ def retry(  # type: ignore
     ] = None,
     count: int = 1,
     backoff: typing.Optional[typing.Union[BackOffFunction, float]] = None,
+    logger: typing.Optional[LoggerLike] = None,
 ) -> typing.Union[
     typing.Callable[
         [typing.Union[Function[P, R], CoroutineFunction[P, R]]],
@@ -88,7 +87,7 @@ def retry(  # type: ignore
                     try:
                         return await func(*args, **kwargs)
                     except exc_type or Exception as exc:
-                        log_exception(exc)
+                        log_exception(exc, logger=logger)
 
                         if backoff is not None:
                             if callable(backoff):
@@ -106,7 +105,7 @@ def retry(  # type: ignore
                 try:
                     return func(*args, **kwargs)  # type: ignore
                 except exc_type or Exception as exc:
-                    log_exception(exc)
+                    log_exception(exc, logger=logger)
                     if backoff is not None:
                         if callable(backoff):
                             time.sleep(backoff(_))
@@ -122,7 +121,7 @@ def retry(  # type: ignore
     return decorator(func)
 
 
-class classorinstancemethod(typing.Generic[T, P, R_co]):
+class classorinstancemethod(typing.Generic[T, P, Rco]):
     """
     Method decorator.
 
@@ -148,13 +147,13 @@ class classorinstancemethod(typing.Generic[T, P, R_co]):
     @property
     def __func__(
         self,
-    ) -> typing.Callable[typing.Concatenate[typing.Union[T, typing.Type[T]], P], R_co]:
+    ) -> typing.Callable[typing.Concatenate[typing.Union[T, typing.Type[T]], P], Rco]:
         return self.func
 
     def __init__(
         self,
         func: typing.Callable[
-            typing.Concatenate[typing.Union[T, typing.Type[T]], P], R_co
+            typing.Concatenate[typing.Union[T, typing.Type[T]], P], Rco
         ],
         /,
     ):
@@ -163,19 +162,19 @@ class classorinstancemethod(typing.Generic[T, P, R_co]):
     @typing.overload
     def __get__(
         self, instance: T, owner: typing.Optional[typing.Type[T]] = None, /
-    ) -> typing.Callable[P, R_co]: ...
+    ) -> typing.Callable[P, Rco]: ...
 
     @typing.overload
     def __get__(
         self, instance: None, owner: typing.Type[T], /
-    ) -> typing.Callable[P, R_co]: ...
+    ) -> typing.Callable[P, Rco]: ...
 
     def __get__(
         self,
         instance: typing.Optional[T],
         owner: typing.Optional[typing.Type[T]] = None,
         /,
-    ) -> typing.Callable[P, R_co]:
+    ) -> typing.Callable[P, Rco]:
         if instance is None:  # Accessed from the class
             return classmethod(self.func).__get__(None, owner)  # type: ignore
         # Accessed from the instance

@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 from helpers.dependencies import depends_on
 from helpers.logging import log_exception
 from helpers.generics.utils.misc import is_iterable, is_exception_class, is_mapping
-from helpers.generics.typing import Function, CoroutineFunction
+from helpers.types import Function, CoroutineFunction
 
 # Why this you say? I'm just too lazy to catch exceptions myself. I know. Its overkill.
 

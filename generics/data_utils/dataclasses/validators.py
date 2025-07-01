@@ -3,7 +3,7 @@ import typing
 import operator
 import re
 
-from helpers.generics.typing import SupportsRichComparison
+from helpers.types import SupportsRichComparison
 from .exceptions import FieldValidationError
 
 typing.Sized

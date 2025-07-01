@@ -1,10 +1,54 @@
 import typing
+from dataclasses import dataclass
+from typing_extensions import ParamSpec
 from types import MappingProxyType
 import copy
 import collections.abc
 
-from .typing import SupportsKeysAndGetItem
 
+class SupportsRichComparison(typing.Protocol):
+    def __lt__(self, other: typing.Any, /) -> bool: ...
+    def __le__(self, other: typing.Any, /) -> bool: ...
+    def __gt__(self, other: typing.Any, /) -> bool: ...
+    def __ge__(self, other: typing.Any, /) -> bool: ...
+    def __eq__(self, other: typing.Any, /) -> bool: ...
+    def __ne__(self, other: typing.Any, /) -> bool: ...
+
+
+class SupportsKeysAndGetItem(typing.Protocol):
+    def __getitem__(self, name: typing.Any, /) -> typing.Any: ...
+
+    def keys(self) -> typing.Iterable[typing.Any]: ...
+
+
+P = ParamSpec("P")
+R = typing.TypeVar("R")
+T = typing.TypeVar("T")
+
+Function = typing.Callable[P, R]
+CoroutineFunction = typing.Callable[P, typing.Awaitable[R]]
+
+
+@dataclass
+class _Dataclass:
+    pass
+
+
+DataclassType = type(_Dataclass)
+
+
+class LoggerLike(typing.Protocol):
+    """A protocol for logging objects that support various logging methods."""
+
+    def log(self, *args: typing.Any, **kwargs: typing.Any) -> None: ...
+    def debug(self, *args: typing.Any, **kwargs: typing.Any) -> None: ...
+    def info(self, *args: typing.Any, **kwargs: typing.Any) -> None: ...
+    def warning(self, *args: typing.Any, **kwargs: typing.Any) -> None: ...
+    def error(self, *args: typing.Any, **kwargs: typing.Any) -> None: ...
+    def critical(self, *args: typing.Any, **kwargs: typing.Any) -> None: ...
+    def exception(
+        self, *args: typing.Any, exc_info: bool = True, **kwargs: typing.Any
+    ) -> None: ...
 
 
 class MappingProxy(collections.abc.Mapping):
@@ -112,9 +156,7 @@ class MappingProxy(collections.abc.Mapping):
             return self.__getattr__(key)
 
     def __repr__(self) -> str:
-        return (
-            f"{self.__name__}{repr(self._wrapped).removeprefix('mappingproxy')}"
-        )
+        return f"{self.__name__}{repr(self._wrapped).removeprefix('mappingproxy')}"
 
     def __iter__(self):
         return iter(self._wrapped)

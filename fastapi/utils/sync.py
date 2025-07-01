@@ -3,7 +3,7 @@ import functools
 from starlette.concurrency import run_in_threadpool
 import uvloop
 
-from helpers.generics.typing import Function, CoroutineFunction, P, R
+from helpers.types import Function, CoroutineFunction, P, R
 
 
 def sync_to_async(func: Function[P, R]) -> CoroutineFunction[P, R]:

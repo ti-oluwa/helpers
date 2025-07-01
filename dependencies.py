@@ -1,15 +1,14 @@
-import importlib
 import typing
 import functools
 import warnings
+from importlib.util import find_spec
 
-try:
-    from typing_extensions import ParamSpec
-except ImportError:
-    from typing import ParamSpec
+from helpers.types import P, R
 
-_P = ParamSpec("_P")
-_R = typing.TypeVar("_R")
+
+def has_package(package_name) -> bool:
+    """Check if a package is installed."""
+    return find_spec(package_name) is not None
 
 
 class DependencyRequired(Exception):
@@ -31,7 +30,7 @@ class DependencyRequired(Exception):
         self.missing_dependencies = missing_dependencies
 
 
-def deps_required(dependencies: typing.Dict[str, str]):
+def deps_required(dependencies: typing.Dict[str, str]) -> None:
     """
     Helper function to check if the dependencies or packages required by a module are installed.
 
@@ -41,16 +40,14 @@ def deps_required(dependencies: typing.Dict[str, str]):
     """
     missing = []
     for name, url_or_package in dict(dependencies).items():
-        try:
-            importlib.import_module(name)
-        except ImportError:
+        if not has_package(name):
             missing.append((name, url_or_package))
 
     if missing:
         raise DependencyRequired(*missing)
 
 
-def deps_warning(dependencies: typing.Dict[str, str]):
+def deps_warning(dependencies: typing.Dict[str, str]) -> None:
     """
     Helper function to check and raise a warning if the dependencies or packages required by a module are not installed.
 
@@ -75,9 +72,9 @@ def depends_on(dependencies: typing.Dict[str, str], warning: bool = False):
     :param warning: If True, a warning is raised instead of an exception.
     """
 
-    def decorator(func: typing.Callable[_P, _R]) -> typing.Callable[_P, _R]:
+    def decorator(func: typing.Callable[P, R]) -> typing.Callable[P, R]:
         @functools.wraps(func)
-        def wrapper(*args: _P.args, **kwargs: _P.kwargs) -> _R:
+        def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
             if warning:
                 deps_warning(dependencies)
             else:

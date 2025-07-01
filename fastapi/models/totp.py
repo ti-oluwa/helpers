@@ -88,11 +88,11 @@ class TimeBasedOTP(  # type: ignore
         except ValueError:
             return False
 
-        ip_address = get_ip_address(request).exploded if request else None
+        ip_address = get_ip_address(request) if request else None
         # Ensure that the same device/machine that
         # requested the token's creation is the one verifying
         if (ip_address and self.requestor_ip_address) and (
-            ip_address != str(self.requestor_ip_address)  # type: ignore
+            ip_address.exploded != str(self.requestor_ip_address)  # type: ignore
         ):
             return False
 

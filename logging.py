@@ -5,12 +5,16 @@ import sys
 import traceback
 from typing import TextIO, Optional
 
+from helpers.types import LoggerLike
+
 
 def setup_logging(
     log_file: Optional[str] = None,
     console: Optional[TextIO] = sys.stdout,
     base_level: int | str = py_logging.INFO,
     format: Optional[str] = None,
+    datefmt: Optional[str] = "%d/%b/%Y %H:%M:%S",
+    handlers: Optional[typing.Sequence[py_logging.Handler]] = None,
 ) -> None:
     """
     Simple interface to set up logging to a file and/or console stream.
@@ -19,8 +23,10 @@ def setup_logging(
     :param console: Console stream to log to. Set to None to disable console logging.
     :param base_level: Base log level.
     :param format: Log message format.
+    :param datefmt: Date format for log messages.
+    :param handlers: Additional logging handlers to add.
     """
-    handlers = []
+    handlers = list(handlers or [])
     if console:
         handlers.append(py_logging.StreamHandler(sys.stdout))
 
@@ -32,7 +38,7 @@ def setup_logging(
     py_logging.basicConfig(
         level=base_level,
         format=format or "[%(asctime)s] %(message)s",
-        datefmt="%d/%b/%Y %H:%M:%S",
+        datefmt=datefmt,
         handlers=handlers,
     )
 
@@ -51,7 +57,7 @@ def modify_log_level(logger_name: str, level: int | str) -> None:
 def log_message(
     message: str,
     level: int | str = py_logging.INFO,
-    logger: typing.Optional[py_logging.Logger] = None,
+    logger: typing.Optional[LoggerLike] = None,
 ) -> None:
     """
     Log a message with the specified log level.
@@ -88,27 +94,29 @@ def get_function_name(exc: BaseException) -> str:
 
 def log_exception(
     exc: BaseException,
-    custom_message: typing.Optional[str] = None,
-    logger: typing.Optional[py_logging.Logger] = None,
+    message: typing.Optional[str] = None,
+    *,
+    name: typing.Optional[str] = None,
+    logger: typing.Optional[LoggerLike] = None,
 ) -> None:
     """
     Log an exception with optional custom message and traceback.
 
     :param exc: Exception object.
-    :param custom_message: Optional custom message to log.
-    :
+    :param message: Optional custom message to log.
+    :param logger: Optional logger to use.
+    :param name: Optional name for the logger.
     """
-    logger = logger or py_logging.getLogger(__name__)
-
+    logger = logger or py_logging.getLogger(name or __name__)
     # Compose the log message
-    if custom_message:
-        log_message = f"{custom_message}: {exc}"
+    if message:
+        log_message = f"{message}: {exc}"
     else:
         log_message = f"An error occurred: {exc}"
 
     # Log the exception with traceback
     try:
-        logger.error(log_message, exc_info=True)
+        logger.exception(log_message, exc_info=True)
 
         # Optionally log additional environment/context information
         logger.error(f"Exception type: {type(exc).__name__}")

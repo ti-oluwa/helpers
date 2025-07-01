@@ -22,14 +22,13 @@ from dataclasses import dataclass
 from contextlib import asynccontextmanager
 import hashlib
 import weakref
-from collections import OrderedDict
 from datetime import datetime, timedelta
 
 from helpers.logging import log_exception
-from .misc import get_memory_size
+from helpers.generics.utils.misc import get_memory_size
+from helpers.types import LoggerLike, T
 
 
-T = typing.TypeVar("T")
 SyncDownloadHandler = typing.Callable[[httpx.Response], T]
 """Handler for download response"""
 AsyncDownloadHandler = typing.Callable[[httpx.Response], typing.Awaitable[T]]
@@ -298,6 +297,7 @@ async def fast_multi_download(
     config: typing.Optional[DownloadConfig] = None,
     batch_size: int = 10,
     progress_callback: typing.Optional[ProgressCallback] = None,
+    logger: typing.Optional[LoggerLike] = None,
 ) -> typing.Dict[str, typing.Union[T, bytes]]:
     """Download multiple URLs concurrently with progress tracking.
 
@@ -306,6 +306,7 @@ async def fast_multi_download(
     :param config: Optional download configuration
     :param batch_size: Maximum number of concurrent downloads
     :param progress_callback: Optional function called with (completed, total) counts
+    :param logger: Optional logger for error reporting
     :return: Dictionary mapping names to download results
 
     Example:
@@ -365,6 +366,7 @@ async def fast_multi_download(
                 progress_callback=progress_callback,
                 completed=completed,
                 total=total,
+                logger=logger,
             )
             results.update(batch_result)
             failed.update(failed_tasks)
@@ -404,6 +406,7 @@ async def _process_batch_tasks(
     progress_callback: typing.Optional[ProgressCallback],
     completed: int,
     total: int,
+    logger: typing.Optional[LoggerLike] = None,
 ) -> typing.Tuple[dict, dict]:
     """Process a batch of download tasks with progress tracking.
 
@@ -440,7 +443,7 @@ async def _process_batch_tasks(
                 progress_callback(completed + len(results), total)
 
         except Exception as exc:
-            log_exception(exc)
+            log_exception(exc, logger=logger)
             if name:
                 failed[name] = task
 
@@ -495,6 +498,7 @@ def multi_download(
     default_handler: typing.Optional[DownloadHandler[T]] = None,
     config: typing.Optional[DownloadConfig] = None,
     progress_callback: typing.Optional[ProgressCallback] = None,
+    logger: typing.Optional[LoggerLike] = None,
 ) -> typing.Dict[str, typing.Union[T, bytes]]:
     """Synchronous version of concurrent downloads with progress tracking.
 
@@ -543,7 +547,7 @@ def multi_download(
                 "error": exc,
                 "handler": handler,
             }
-            log_exception(exc)
+            log_exception(exc, logger=logger)
 
     # If any download still failed, retry them once
     if errors and config.max_retries > 1:
@@ -566,7 +570,7 @@ def multi_download(
                     progress_callback(completed, total)
             except Exception as exc:
                 # Keep original error if retry also fails
-                log_exception(exc)
+                log_exception(exc, logger=logger)
                 continue
 
     # If all downloads failed and no handler, raise DownloadFailed from first error

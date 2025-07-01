@@ -14,7 +14,7 @@ from .base import (
     default_connection_identifier,
 )
 from .throttles import BaseThrottle, HTTPThrottle, NoLimit
-from helpers.generics.typing import Function, CoroutineFunction
+from helpers.types import Function, CoroutineFunction
 from helpers.fastapi.utils.sync import sync_to_async
 from helpers.generics.utils.functions import add_parameter_to_signature
 
