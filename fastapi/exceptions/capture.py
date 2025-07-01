@@ -10,7 +10,7 @@ import copy
 import inspect
 import pydantic
 import typing
-from typing_extensions import Self, ParamSpec
+from typing_extensions import Self
 
 from fastapi.exceptions import RequestValidationError, ValidationException
 from starlette.requests import HTTPConnection
@@ -18,11 +18,7 @@ from starlette.responses import Response
 from helpers.fastapi.utils.sync import sync_to_async
 from helpers.generics.exceptions.capture import ExceptionCaptor as BaseExceptionCaptor
 from helpers.generics.utils.decorators import classorinstancemethod
-from helpers.generics.typing import Function
-
-
-P = ParamSpec("P")
-R = typing.TypeVar("R")
+from helpers.types import Function, P, R
 
 
 class ExceptionCaptor(BaseExceptionCaptor[BaseException, Response]):
@@ -99,7 +95,7 @@ class ExceptionCaptor(BaseExceptionCaptor[BaseException, Response]):
         async with captor:
             yield captor
 
-    as_dependency = classorinstancemethod(as_dependency)  # type: ignore
+    as_dependency = classorinstancemethod(as_dependency)  # type: ignore[assignment]
 
 
 # Export Aliases
