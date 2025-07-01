@@ -1,4 +1,4 @@
-name: Code Formatting
+name: Code Linting
 
 on: 
   push:
@@ -23,4 +23,4 @@ jobs:
         pip install ruff
 
     - name: Run Ruff Formatter
-      run: ruff format .
+      run: ruff format . --fix
